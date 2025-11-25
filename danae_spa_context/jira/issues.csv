@@ -1,0 +1,11 @@
+Issue Type,Summary,Description,Priority,Labels
+Epic,Backend Core (Auth + RBAC + Branch),Login/RBAC y header X-Branch-Id obligatorio.,High,backend;multi-branch
+Story,Login API + JWT,POST /auth/login y /auth/me,High,backend;auth
+Story,Interceptor X-Branch-Id,Agregar header en todas las rutas,High,backend;multi-branch
+Epic,Inventario + Servicios,Stock por sucursal y kardex,High,backend;inventario
+Story,DDL materiales/existencias/kardex,Tablas base,High,database
+Epic,Agenda de Citas,Crear/editar/cerrar,High,frontend;backend;citas
+Story,Crear cita pendiente,Usuario+servicio+fecha+hora+anticipo,High,frontend;citas
+Epic,Promos + Puntos,Promos activas y ledger,Medium,backend;promos;puntos
+Epic,Pagos y Comisiones,Periodos/liquidaciones,Medium,backend;pagos
+Epic,Auditoría + Reportes,Bitácoras y dashboards,Low,backend;auditoria

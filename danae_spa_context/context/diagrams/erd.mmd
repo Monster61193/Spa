@@ -1,0 +1,10 @@
+%% Mermaid ERD
+erDiagram
+  sucursales ||--o{ existencias : tiene
+  materiales ||--o{ existencias : stock
+  servicios ||--o{ servicios_materiales : usa
+  usuarios ||--o{ citas : solicita
+  empleados ||--o{ citas : atiende
+  sucursales ||--o{ citas : agenda
+  citas ||--o{ puntos_usuarios_ledger : referencia
+  sucursales ||--o{ puntos_usuarios_ledger : scope
