@@ -1,0 +1,39 @@
+%% Mermaid ERD para sistema multi-sucursal
+erDiagram
+    SUCURSALES ||--o{ EXISTENCIAS : tiene
+    SUCURSALES ||--o{ SERVICIOS_SUCURSAL : ajusta
+    SUCURSALES ||--o{ CITAS : agenda
+    SUCURSALES ||--o{ PUNTOS_MOVIMIENTOS : acumula
+    SUCURSALES ||--o{ AUDIT_LOG : registra
+
+    USUARIOS ||--o{ EMPLEADOS : pertenece
+    USUARIOS ||--o{ USUARIOS_ROLES : asigna
+    USUARIOS ||--o{ CITAS : agenda
+    USUARIOS ||--o{ NOTIFICACIONES : recibe
+    USUARIOS ||--o{ PUNTOS_MOVIMIENTOS : acumula
+    USUARIOS ||--o{ AUDIT_LOG : genera
+
+    ROLES ||--o{ USUARIOS_ROLES : detalla
+
+    EMPLEADOS ||--o{ EMPLEADOS_SUCURSALES : opera
+    EMPLEADOS ||--o{ CITAS : atiende
+    EMPLEADOS ||--o{ COMISIONES : gana
+    EMPLEADOS ||--o{ LIQUIDACIONES : recibe
+    EMPLEADOS ||--o{ AUSENCIAS_EMPLEADO : reporta
+
+    SERVICIOS ||--o{ SERVICIOS_SUCURSAL : override
+    SERVICIOS ||--o{ SERVICIOS_MATERIALES : consume
+    SERVICIOS ||--o{ CITAS : se_pide
+
+    MATERIALES ||--o{ EXISTENCIAS : stock
+    MATERIALES ||--o{ SERVICIOS_MATERIALES : insumo
+
+    PROMOCIONES ||--o{ PROMOCIONES_SERVICIOS : aplica
+    PROMOCIONES ||--o{ PROMOCIONES_APLICADAS : rastrea
+
+    CITAS ||--o{ PUNTOS_MOVIMIENTOS : vincula
+    CITAS ||--o{ COMISIONES : genera
+    CITAS ||--o{ PROMOCIONES_APLICADAS : registra
+
+    COMISIONES ||--o{ LIQUIDACIONES_COMISIONES : agrupa
+    LIQUIDACIONES ||--o{ LIQUIDACIONES_COMISIONES : suma

@@ -1,0 +1,340 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum CitaEstado {
+  pendiente
+  confirmada
+  cancelada
+  cerrada
+}
+
+enum MovimientoTipo {
+  earn
+  redeem
+}
+
+model Sucursal {
+  id             String                @id @default(uuid())
+  nombre         String                @unique
+  zonaHoraria    String                @default("America/Mexico_City")
+  activa         Boolean               @default(true)
+  createdAt      DateTime              @default(now())
+  usuarioRoles   UsuarioRole[]
+  empleadoSucursales EmpleadoSucursal[]
+  existencias    Existencia[]
+  serviciosSucursal ServicioSucursal[]
+  citas          Cita[]
+  puntosMovimientos PuntosMovimiento[]
+  auditLogs      AuditLog[]
+  notificaciones Notificacion[]
+
+  @@map("sucursales")
+}
+
+model Role {
+  id          Int           @id @default(autoincrement())
+  nombre      String        @unique
+  descripcion String?
+  usuarioRoles UsuarioRole[]
+
+  @@map("roles")
+}
+
+model Usuario {
+  id                String        @id @default(uuid())
+  nombre            String
+  email             String        @unique
+  password          String
+  activo            Boolean       @default(true)
+  createdAt         DateTime      @default(now())
+  usuarioRoles      UsuarioRole[]
+  citas             Cita[]
+  puntosMovimientos PuntosMovimiento[]
+  auditLogs         AuditLog[]
+  notificaciones    Notificacion[]
+  empleado          Empleado?
+
+  @@map("usuarios")
+}
+
+model UsuarioRole {
+  usuarioId String
+  rolId     Int
+  sucursalId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [rolId], references: [id], onDelete: Cascade)
+  sucursal  Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, rolId, sucursalId])
+  @@map("usuarios_roles")
+}
+
+model Empleado {
+  id                  String        @id @default(uuid())
+  usuarioId           String        @unique
+  porcentajeComision  Decimal       @default(0)
+  activo              Boolean       @default(true)
+  createdAt           DateTime      @default(now())
+  usuario             Usuario       @relation(fields: [usuarioId], references: [id])
+  sucursales          EmpleadoSucursal[]
+  comisiones          Comision[]
+  liquidaciones       Liquidacion[]
+  ausencias           AusenciaEmpleado[]
+  citas               Cita[]
+
+  @@map("empleados")
+}
+
+model EmpleadoSucursal {
+  empleadoId  String
+  sucursalId  String
+  rolLocal    String
+  predeterminada Boolean @default(false)
+  empleado    Empleado @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+  sucursal    Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+  @@id([empleadoId, sucursalId])
+  @@map("empleados_sucursales")
+}
+
+model Servicio {
+  id          String      @id @default(uuid())
+  nombre      String
+  descripcion String?
+  precioBase  Decimal     @default(0)
+  duracionMinutos Int
+  activo      Boolean     @default(true)
+  serviciosSucursal ServicioSucursal[]
+  serviciosMateriales ServicioMaterial[]
+  citas       Cita[]
+  promocionesServicios PromocionServicio[]
+
+  @@map("servicios")
+}
+
+model ServicioSucursal {
+  servicioId  String
+  sucursalId  String
+  precio      Decimal
+  duracionMinutos Int
+  activo      Boolean  @default(true)
+  servicio    Servicio @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  sucursal    Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+  @@id([servicioId, sucursalId])
+  @@map("servicios_sucursal")
+}
+
+model Material {
+  id              String    @id @default(uuid())
+  nombre          String
+  unidad          String
+  costoUnitario   Decimal   @default(0)
+  existencias     Existencia[]
+  serviciosMateriales ServicioMaterial[]
+
+  @@map("materiales")
+}
+
+model Existencia {
+  sucursalId String
+  materialId String
+  stockActual Decimal  @default(0)
+  stockMinimo Decimal  @default(0)
+  updatedAt  DateTime @updatedAt
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@id([sucursalId, materialId])
+  @@map("existencias")
+}
+
+model ServicioMaterial {
+  servicioId String
+  materialId String
+  cantidad   Decimal
+  servicio   Servicio @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+
+  @@id([servicioId, materialId])
+  @@map("servicios_materiales")
+}
+
+model Promocion {
+  id            String    @id @default(uuid())
+  nombre        String
+  descripcion   String?
+  descuento     Decimal
+  fechaInicio   DateTime
+  fechaFin      DateTime
+  estado        Boolean   @default(true)
+  sucursalId    String?
+  tipo          String
+  promocionServicios PromocionServicio[]
+  promocionesAplicadas PromocionAplicada[]
+
+  @@index([sucursalId])
+  @@map("promociones")
+}
+
+model PromocionServicio {
+  promocionId String
+  servicioId  String
+  promocion   Promocion @relation(fields: [promocionId], references: [id], onDelete: Cascade)
+  servicio    Servicio  @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+
+  @@id([promocionId, servicioId])
+  @@map("promociones_servicios")
+}
+
+model Cita {
+  id           String      @id @default(uuid())
+  usuarioId    String?
+  empleadoId   String?
+  sucursalId   String
+  servicioId   String?
+  fechaHora    DateTime
+  estado       CitaEstado  @default(pendiente)
+  total        Decimal     @default(0)
+  anticipo     Decimal     @default(0)
+  notas        String?
+  createdAt    DateTime    @default(now())
+  usuario      Usuario?    @relation(fields: [usuarioId], references: [id])
+  empleado     Empleado?   @relation(fields: [empleadoId], references: [id])
+  sucursal     Sucursal    @relation(fields: [sucursalId], references: [id])
+  servicio     Servicio?   @relation(fields: [servicioId], references: [id])
+  puntosMovimientos PuntosMovimiento[]
+  comisiones   Comision[]
+  promocionesAplicadas PromocionAplicada[]
+
+  @@index([usuarioId])
+  @@index([empleadoId])
+  @@index([sucursalId])
+  @@index([servicioId])
+  @@index([fechaHora])
+  @@map("citas")
+}
+
+model PromocionAplicada {
+  id                  UUID      @id @default(uuid())
+  citaId              String
+  promocionId         String?
+  porcentajeAplicado  Decimal?
+  montoDescontado     Decimal?
+  aplicadoEn          DateTime  @default(now())
+  cita                Cita      @relation(fields: [citaId], references: [id], onDelete: Cascade)
+  promocion           Promocion? @relation(fields: [promocionId], references: [id])
+
+  @@index([citaId])
+  @@index([promocionId])
+  @@map("promociones_aplicadas")
+}
+
+model PuntosMovimiento {
+  id          String         @id @default(uuid())
+  usuarioId   String
+  sucursalId  String
+  citaId      String
+  tipo        MovimientoTipo
+  cantidad    Int
+  fecha       DateTime       @default(now())
+  usuario     Usuario        @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  sucursal    Sucursal       @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  cita        Cita           @relation(fields: [citaId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([sucursalId])
+  @@index([citaId])
+  @@map("puntos_movimientos")
+}
+
+model Comision {
+  id          String    @id @default(uuid())
+  empleadoId  String
+  citaId      String
+  porcentaje  Decimal
+  monto       Decimal
+  generadoEn  DateTime  @default(now())
+  empleado    Empleado  @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+  cita        Cita      @relation(fields: [citaId], references: [id], onDelete: Cascade)
+  liquidaciones LiquidacionComision[]
+
+  @@index([empleadoId])
+  @@index([citaId])
+  @@map("comisiones")
+}
+
+model Liquidacion {
+  id             String        @id @default(uuid())
+  empleadoId     String
+  periodoInicio  DateTime
+  periodoFin     DateTime
+  montoTotal     Decimal
+  generadoEn     DateTime      @default(now())
+  empleado       Empleado      @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+  comisiones     LiquidacionComision[]
+
+  @@index([empleadoId])
+  @@map("liquidaciones")
+}
+
+model LiquidacionComision {
+  liquidacionId String
+  comisionId    String
+  liquidacion   Liquidacion @relation(fields: [liquidacionId], references: [id], onDelete: Cascade)
+  comision      Comision    @relation(fields: [comisionId], references: [id], onDelete: Cascade)
+
+  @@id([liquidacionId, comisionId])
+  @@map("liquidaciones_comisiones")
+}
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  usuarioId   String?
+  sucursalId  String?
+  entidad     String
+  accion      String
+  descripcion String?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  usuario     Usuario?  @relation(fields: [usuarioId], references: [id])
+  sucursal    Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  @@index([usuarioId])
+  @@index([sucursalId])
+  @@map("audit_log")
+}
+
+model Notificacion {
+  id         String   @id @default(uuid())
+  usuarioId  String
+  sucursalId String
+  tipo       String
+  mensaje    String
+  leida      Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id])
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id])
+
+  @@index([usuarioId])
+  @@map("notificaciones")
+}
+
+model AusenciaEmpleado {
+  id         String   @id @default(uuid())
+  empleadoId String
+  inicio     DateTime
+  fin        DateTime
+  motivo     String?
+  createdAt  DateTime @default(now())
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+
+  @@index([empleadoId])
+  @@map("ausencias_empleado")
+}

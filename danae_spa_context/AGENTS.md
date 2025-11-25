@@ -1,42 +1,37 @@
-# AGENTS.md — Reglas del Proyecto
+# AGENTS.md — Reglas del Proyecto Danae Spa
 
-- La documentación base es `context/Documentacion_Completa_Sistema_Citas.md`, que se complementa con los `context/*` (index, multi_branch_delta, rules_of_engagement, inventory_and_points_rules, api_contracts, data_model, rbac, etc.) para las reglas funcionales y no funcionales.
-- Antes de proponer una nueva regla o flujo revisa esos contextos y actualiza la documentación principal para que siga siendo la fuente única del negocio.
+- `context/Documentacion_Completa_Sistema_Citas.md` es la fuente maestra para alcance funcional y no funcional; complementa siempre con los otros archivos en `context/` (api_contracts, data_model, multi_branch_delta, rules_of_engagement, inventory_and_points_rules, etc.).
+- Antes de agregar reglas nuevas, actualiza la documentación principal y referencia los contextos implicados para que la guía siga siendo única.
 
-## Convenciones del código
-- JSDoc obligatorio antes de cada función exportada o invocada desde JSX (`@jsdoc/require-jsdoc` en ESLint).
-- snake_case para variables, funciones, constantes y props; hooks `useXxx` (camelCase con prefijo `use`) y componentes/tipos en PascalCase.
-- Siempre usa `import type` para importar tipos en TypeScript; evita los `import` que traen valores innecesarios.
-- Mantén funciones pequeñas, claras y enfocadas en una sola responsabilidad (SRP).
+## Convenciones de código
+- JSDoc obligatorio en cada clase, función exportada y handler. Usa comentarios breves que describan propósito o decisiones.
+- `snake_case` para variables, funciones y constantes; `useXxx` (camelCase) para hooks; `PascalCase` para tipos, DTOs y componentes.
+- Importa tipos con `import type` y evita traer implementaciones innecesarias.
+- Las funciones deben ser pequeñas, enfocadas y predecibles (SRP).
 
-## Principios SOLID
-- SRP: cada módulo o función tiene un único motivo para cambiar (una sola responsabilidad).
-- OCP: extiende con adapters o policies antes que modificar implementaciones existentes.
-- LSP: cualquier subtipo o implementador debe comportarse como el tipo base esperado.
-- ISP: las interfaces se diseñan para consumidores concretos, evitando contratos monolíticos.
-- DIP: depende de abstracciones (gateways/services) y permite inyección de dependencias para desacoplar implementaciones.
+## Principios SOLID y Clean Code
+- SRP: cada módulo/fichero cumple una sola responsabilidad.
+- OCP: extiende con adapters o policies sin modificar código estable.
+- LSP: los subtipos deben comportarse como el tipo base.
+- ISP: define interfaces específicas para consumidores.
+- DIP: depende de abstracciones (gateways/services).
+- Usa nombres claros, evita efectos secundarios y aplica DRY/KISS/YAGNI.
+- Maneja errores uniformemente (_{ code, message, details? }_) y valida bordes con Zod, guardas, DTOs o pipes.
+- Registra logs discretos y no expongas secretos.
 
-## Clean Code & Calidad
-- Nombres descriptivos (snake_case), funciones breves, evita efectos colaterales indeseados y respeta DRY/KISS/YAGNI.
-- Valida bordes con Zod y maneja errores de forma uniforme; el gateway traduce `{ code, message, details? }` a toasts discretos.
-- Registra logs útiles pero discretos; no expongas secretos ni sobrecargues la salida.
-- Automáticamente separa commands (acciones) de queries (consultas) y escribe pruebas para la lógica crítica antes de desplegar.
+## Multi-sucursal
+- Cada request sensible exige `X-Branch-Id` y el backend lo valida con `BranchGuard/RolesGuard` antes de ejecutar handlers.
+- Aplica `id_sucursal` en payloads cuando sea necesario (reassigns, auditoría) siempre sincronizado con el header.
+- Las colecciones de datos por sucursal deben vivir en tablas como `servicios_sucursal`, `existencias`, `puntos_movimientos`, etc., y su lógica debe respetar anexos en `context/multi_branch_delta.md`.
+- Documenta cualquier nueva regla multi-sucursal en `context/multi_branch_delta.md` y actualiza Swagger/contractos.
 
-## Multi-sucursal & Auditoría
-- Todas las rutas sensibles reciben `X-Branch-Id`; los payloads pueden llevar `id_sucursal` y el backend debe gobernar la sucursal activa usando `usuarios_sucursales`.
-- Los datos (servicios, materiales, promociones, puntos, comisiones, bitácoras) se aíslan por sucursal (`materiales_sucursal`, `servicios_overrides`, `puntos_usuarios`, `pagos_empleados`, `historial_actividades`, etc.).
-- Audita acciones con `bitacora_citas` y `historial_actividades`; cada sucursal tiene trazabilidad propia de inventario y puntos.
-- No rompas los contratos existentes: agrega `X-Branch-Id` y `id_sucursal` respetando la compatibilidad, y documenta las extensiones en `context/multi_branch_delta.md`.
+## Documentación & QA
+- Actualiza `context/index.md` si los módulos o capacidades cambian (listado de módulos y KPIs).
+- Usa `db/ddl_postgres.sql` y `db/erd.mmd` como referencia para definiciones de datos.
+- MSW (`frontend/src/mocks/`) y Playwright (`frontend/tests/`) deben reflejar los datasets y flujos documentados.
+- La base de datos en backend se describe en `backend/prisma/schema.prisma` y se sincroniza con `backend/prisma/seed.ts`.
 
-## Documentación & Contexto
-- `context/Documentacion_Completa_Sistema_Citas.md` es la fuente definitiva de alcances; compleméntala con `context/rules_of_engagement.md`, `context/multi_branch_delta.md`, `context/inventory_and_points_rules.md` y los demás contextos relevantes.
-- Antes de introducir reglas nuevas, actualiza la documentación y agrega referencias cruzadas para evitar dispersión.
-- Usa `Documentacion_Completa_Sistema_Citas.pdf` como referencia histórica y alinea cada ajuste con los modelos descritos en `context/data_model.md` y `context/rbac.md`.
-
-## Lint & Format
-- ESLint usa Flat Config en `eslint.config.js`; la regla `react-hooks/rules-of-hooks` es error y `react-hooks/exhaustive-deps` es warn.
-- Prettier se configura en `.prettierrc`; mantén el código formateado con `npm run format`.
-- `npm run lint` valida las reglas; `npm run format` corrige formatos.
-
-## Commits
-- Mensajes con prefijo `feat|fix|docs|refactor|test: ...`.
+## Lint, format y commits
+- Frontend: ESLint Flat (`frontend/eslint.config.js`) y Prettier (`frontend/.prettierrc`). Backend: ESLint con `@typescript-eslint` y plugin JSDoc.
+- Scripts: `npm run lint`, `npm run format`, `npm run test:e2e` (en frontend). Backend tiene `npm run lint`, `npm run format`, `npm run prisma:generate` y `npm run prisma:seed`.
+- Commits deben seguir el formato `feat|fix|docs|refactor|test: mensaje`.

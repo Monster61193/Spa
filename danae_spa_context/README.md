@@ -1,28 +1,22 @@
-# DanaeSpa — Contexto del Proyecto (Multi‑Sucursal)
+# DanaeSpa — Monorepo de referencia multi-sucursal
 
-Este paquete contiene **toda la documentación base** para iniciar desde cero el sistema de **gestión de citas para Spa** con soporte **multi‑sucursal**.
+Este repositorio reúne las piezas necesarias para ejecutar el sistema de citas del Spa con soporte multi-sucursal: documentación compartida, frontend (Vite + React), backend (NestJS + Prisma + PostgreSQL), bases de datos y QA.
 
-## Contenido
-- `AGENTS.md` — Reglas de colaboración y estilo (JSDoc, snake_case, SOLID, Clean Code).
-- `context/index.md` — Resumen ejecutivo y alcance.
-- `context/data_model.md` — Modelo de datos con entidades y relaciones.
-- `context/api_contracts.md` — Contratos API (REST) y convenciones (incluye `X-Branch-Id`).
-- `context/rbac.md` — Roles, permisos y políticas.
-- `context/inventory_and_points_rules.md` — Reglas de negocio (inventario, puntos, promociones, comisiones).
-- `context/multi_branch_delta.md` — Consideraciones multi‑sucursal (datos, API, UI, QA).
-- `context/use_cases.md` — Historias de usuario y casos de uso.
-- `context/roadmap.md` — Roadmap sugerido por fases.
-- `context/diagrams/erd.mmd` — ERD en formato **Mermaid**.
-- `database/schema.sql` — Script DDL **PostgreSQL** listo para ejecutar.
-- `jira/issues.csv` — CSV inicial para importar a **Jira**.
-- `frontend/eslint.config.js` — Config base de ESLint.
-- `frontend/.prettierrc` — Reglas de formato.
-- `.env.example` — Variables de entorno de ejemplo.
+## Estructura destacada
+- `frontend/` → UI React + Vite con Axios, React Query, RHF+Zod, MSW y Playwright E2E.
+- `backend/` → API NestJS con módulos por dominio (auth, branches, services, appointments, inventory, promotions, points, commissions, audit, notifications) y Prisma para PostgreSQL.
+- `context/` → documentación viva (index, use cases, rules) más el PDF original y los diagramas.
+- `db/` → `ddl_postgres.sql` (DDL extendido) y `erd.mmd`.
+- `jira/issues.csv` → backlog inicial importable.
+- `AGENTS.md` → reglas de estilo, documentación y multi-sucursal.
 
-> Fecha de generación: 2025-11-24
+## Guía rápida
+1. **Base de datos**: `psql -U postgres -f db/ddl_postgres.sql`; luego `cd backend && npm run prisma:generate && npm run prisma:seed`.
+2. **Frontend**: `cd frontend && npm install`, luego `npm run dev` y la UI arranca en `http://localhost:4173`.
+3. **Backend**: `cd backend && npm install`, luego `npm run start:dev` (expone `http://localhost:3000/api` con `X-Branch-Id` obligatorio).
+4. **QA**: `cd frontend && npm run test:e2e` valida el flujo demo (reporte HTML en `frontend/playwright-report`).
 
-## Uso rápido
-1. **DB**: `psql -U postgres -f database/schema.sql`
-2. **Jira**: importar `jira/issues.csv` (Issue Type, Epic/Story).
-3. **Código**: usa `AGENTS.md` y los docs en `context/` como fuente de verdad.
-
+## Registros
+- MSW en `frontend/src/mocks/` simula sucursales, citas, inventario, promos y puntos.
+- Playwright (`frontend/tests/`) cubre login demo → cambio de sucursal → validaciones visuales.
+- Prisma seed (`backend/prisma/seed.ts`) precarga sucursales, servicios, promociones y stock según los mocks.
