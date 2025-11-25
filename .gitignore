@@ -1,0 +1,6 @@
+# Ignorar archivos de macOS
+.DS_Store
+
+# (Opcional) Si usas Node.js, ignora la carpeta de dependencias
+/node_modules
+
