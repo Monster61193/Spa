@@ -1,134 +1,154 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from "@prisma/client";
 import {
   branches,
   services_catalog,
   services_overrides,
   promotions_catalog,
-  inventory_snapshot
-} from '../src/common/mocks/sample-data'
+  inventory_snapshot,
+} from "../src/common/mocks/sample-data";
 
-const prisma = new PrismaClient()
+const prisma = new PrismaClient();
 
 async function main() {
+  console.log("🌱 Iniciando seed...");
+
+  // 1. Sucursales
+  // El mock tiene: { id, nombre, zonaHoraria }
   await prisma.$transaction(
     branches.map((branch) =>
       prisma.sucursal.upsert({
-        where: { id_sucursal: branch.id_sucursal },
+        where: { id: branch.id },
         update: {},
         create: {
-          id_sucursal: branch.id_sucursal,
+          id: branch.id,
           nombre: branch.nombre,
-          zona_horaria: branch.zona_horaria
-        }
+          zonaHoraria: branch.zonaHoraria, // Mock usa zonaHoraria
+        },
       })
     )
-  )
+  );
 
+  // 2. Servicios
+  // El mock tiene: { id, nombre, precioBase, duracionMinutos }
   await prisma.$transaction(
     services_catalog.map((service) =>
       prisma.servicio.upsert({
-        where: { id_servicio: service.id_servicio },
+        where: { id: service.id },
         update: {},
         create: {
-          id_servicio: service.id_servicio,
+          id: service.id,
           nombre: service.nombre,
-          precio_base: service.precio_base,
-          duracion_minutos: service.duracion_minutos
-        }
+          precioBase: service.precioBase, // Mock usa precioBase
+          duracionMinutos: service.duracionMinutos, // Mock usa duracionMinutos
+        },
       })
     )
-  )
+  );
 
+  // 3. Overrides
+  // El mock tiene: { servicioId, sucursalId, precio, duracionMinutos }
   await prisma.$transaction(
     services_overrides.map((override) =>
       prisma.servicioSucursal.upsert({
         where: {
-          id_servicio_id_sucursal: {
-            id_servicio: override.id_servicio,
-            id_sucursal: override.id_sucursal
-          }
+          servicioId_sucursalId: {
+            servicioId: override.servicioId, // Mock usa servicioId
+            sucursalId: override.sucursalId, // Mock usa sucursalId
+          },
         },
         update: {},
         create: {
-          id_servicio: override.id_servicio,
-          id_sucursal: override.id_sucursal,
+          servicioId: override.servicioId,
+          sucursalId: override.sucursalId,
           precio: override.precio,
-          duracion_minutos: override.duracion_minutos
-        }
+          duracionMinutos: override.duracionMinutos,
+        },
       })
     )
-  )
+  );
 
+  // 4. Promociones
+  // El mock tiene: { id, nombre, descuento, vigente }
   await prisma.$transaction(
     promotions_catalog.map((promo) =>
       prisma.promocion.upsert({
-        where: { id_promocion: promo.id_promocion },
+        where: { id: promo.id }, // Mock usa id
         update: {},
         create: {
-          id_promocion: promo.id_promocion,
+          id: promo.id,
           nombre: promo.nombre,
           descuento: promo.descuento,
-          fecha_inicio: new Date(),
-          fecha_fin: new Date('2026-12-31'),
-          tipo: 'general'
-        }
+          fechaInicio: new Date(),
+          fechaFin: new Date("2026-12-31"),
+          tipo: "general",
+          estado: promo.vigente, // Mapeamos 'vigente' del mock a 'estado' del schema
+        },
       })
     )
-  )
+  );
 
-  const material_names = new Map<string, { nombre: string; unidad: string }>()
-  Object.entries(inventory_snapshot).forEach(([id_sucursal, rows]) => {
+  // 5. Materiales e Inventario
+  // El mock usa: { material, stockActual, stockMinimo }
+  const material_names = new Map<string, { nombre: string; unidad: string }>();
+
+  Object.entries(inventory_snapshot).forEach(([sucursalId, rows]) => {
     rows.forEach((row) => {
-      const material_id = `${id_sucursal}-${row.material}`
-      material_names.set(material_id, { nombre: row.material, unidad: 'unidad' })
-    })
-  })
+      const material_id = `${sucursalId}-${row.material.replace(/\s+/g, "-").toLowerCase()}`;
+      material_names.set(material_id, {
+        nombre: row.material,
+        unidad: "unidad",
+      });
+    });
+  });
 
+  // Insertar Materiales
   await prisma.$transaction(
-    Array.from(material_names.entries()).map(([id_material, info]) =>
+    Array.from(material_names.entries()).map(([id, info]) =>
       prisma.material.upsert({
-        where: { id_material },
+        where: { id },
         update: {},
         create: {
-          id_material,
+          id,
           nombre: info.nombre,
           unidad: info.unidad,
-          costo_unitario: 0
-        }
+          costoUnitario: 0,
+        },
       })
     )
-  )
+  );
 
+  // Insertar Existencias
   await prisma.$transaction(
-    Object.entries(inventory_snapshot).flatMap(([id_sucursal, rows]) =>
-      rows.map((row) =>
-        prisma.existencias.upsert({
+    Object.entries(inventory_snapshot).flatMap(([sucursalId, rows]) =>
+      rows.map((row) => {
+        const materialId = `${sucursalId}-${row.material.replace(/\s+/g, "-").toLowerCase()}`;
+        return prisma.existencia.upsert({
           where: {
-            id_sucursal_id_material: {
-              id_sucursal,
-              id_material: `${id_sucursal}-${row.material}`
-            }
+            sucursalId_materialId: {
+              sucursalId,
+              materialId,
+            },
           },
           update: {},
           create: {
-            id_sucursal,
-            id_material: `${id_sucursal}-${row.material}`,
-            stock_actual: row.stock_actual,
-            stock_minimo: row.stock_minimo
-          }
-        })
-      )
+            sucursalId,
+            materialId,
+            stockActual: row.stockActual, // Mock usa stockActual
+            stockMinimo: row.stockMinimo, // Mock usa stockMinimo
+          },
+        });
+      })
     )
-  )
+  );
 }
 
 main()
   .then(async () => {
-    await prisma.$disconnect()
-    console.log('Seeds aplicadas')
+    await prisma.$disconnect();
+    console.log("✅ Seeds aplicadas correctamente");
   })
   .catch(async (error) => {
-    console.error('Error en seeds', error)
-    await prisma.$disconnect()
-    process.exit(1)
-  })
+    console.error("❌ Error en seeds:", error);
+    await prisma.$disconnect();
+    process.exit(1);
+  });

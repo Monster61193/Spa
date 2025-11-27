@@ -12,47 +12,51 @@ enum CitaEstado {
   confirmada
   cancelada
   cerrada
+
+  @@map("cita_estado")
 }
 
 enum MovimientoTipo {
   earn
   redeem
+
+  @@map("movimiento_tipo")
 }
 
 model Sucursal {
-  id             String                @id @default(uuid())
-  nombre         String                @unique
-  zonaHoraria    String                @default("America/Mexico_City")
-  activa         Boolean               @default(true)
-  createdAt      DateTime              @default(now())
-  usuarioRoles   UsuarioRole[]
+  id                 String             @id @default(uuid())
+  nombre             String             @unique
+  zonaHoraria        String             @default("America/Mexico_City") @map("zona_horaria")
+  activa             Boolean            @default(true)
+  createdAt          DateTime           @default(now()) @map("created_at")
+  usuarioRoles       UsuarioRole[]
   empleadoSucursales EmpleadoSucursal[]
-  existencias    Existencia[]
-  serviciosSucursal ServicioSucursal[]
-  citas          Cita[]
-  puntosMovimientos PuntosMovimiento[]
-  auditLogs      AuditLog[]
-  notificaciones Notificacion[]
+  existencias        Existencia[]
+  serviciosSucursal  ServicioSucursal[]
+  citas              Cita[]
+  puntosMovimientos  PuntosMovimiento[]
+  auditLogs          AuditLog[]
+  notificaciones     Notificacion[]
 
   @@map("sucursales")
 }
 
 model Role {
-  id          Int           @id @default(autoincrement())
-  nombre      String        @unique
-  descripcion String?
+  id           Int           @id @default(autoincrement())
+  nombre       String        @unique
+  descripcion  String?
   usuarioRoles UsuarioRole[]
 
   @@map("roles")
 }
 
 model Usuario {
-  id                String        @id @default(uuid())
+  id                String             @id @default(uuid())
   nombre            String
-  email             String        @unique
+  email             String             @unique
   password          String
-  activo            Boolean       @default(true)
-  createdAt         DateTime      @default(now())
+  activo            Boolean            @default(true)
+  createdAt         DateTime           @default(now()) @map("created_at")
   usuarioRoles      UsuarioRole[]
   citas             Cita[]
   puntosMovimientos PuntosMovimiento[]
@@ -64,92 +68,92 @@ model Usuario {
 }
 
 model UsuarioRole {
-  usuarioId String
-  rolId     Int
+  usuarioId  String
+  rolId      Int
   sucursalId String
-  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  role      Role     @relation(fields: [rolId], references: [id], onDelete: Cascade)
-  sucursal  Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [rolId], references: [id], onDelete: Cascade)
+  sucursal   Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
 
   @@id([usuarioId, rolId, sucursalId])
   @@map("usuarios_roles")
 }
 
 model Empleado {
-  id                  String        @id @default(uuid())
-  usuarioId           String        @unique
-  porcentajeComision  Decimal       @default(0)
-  activo              Boolean       @default(true)
-  createdAt           DateTime      @default(now())
-  usuario             Usuario       @relation(fields: [usuarioId], references: [id])
-  sucursales          EmpleadoSucursal[]
-  comisiones          Comision[]
-  liquidaciones       Liquidacion[]
-  ausencias           AusenciaEmpleado[]
-  citas               Cita[]
+  id                 String             @id @default(uuid())
+  usuarioId          String             @unique @map("usuario_id")
+  porcentajeComision Decimal            @default(0) @map("porcentaje_comision")
+  activo             Boolean            @default(true)
+  createdAt          DateTime           @default(now()) @map("created_at")
+  usuario            Usuario            @relation(fields: [usuarioId], references: [id])
+  sucursales         EmpleadoSucursal[]
+  comisiones         Comision[]
+  liquidaciones      Liquidacion[]
+  ausencias          AusenciaEmpleado[]
+  citas              Cita[]
 
   @@map("empleados")
 }
 
 model EmpleadoSucursal {
-  empleadoId  String
-  sucursalId  String
-  rolLocal    String
-  predeterminada Boolean @default(false)
-  empleado    Empleado @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
-  sucursal    Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  empleadoId   String
+  sucursalId   String
+  rolLocal     String   @map("rol_local")
+  predeterminada Boolean  @default(false)
+  empleado     Empleado @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+  sucursal     Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
 
   @@id([empleadoId, sucursalId])
   @@map("empleados_sucursales")
 }
 
 model Servicio {
-  id          String      @id @default(uuid())
-  nombre      String
-  descripcion String?
-  precioBase  Decimal     @default(0)
-  duracionMinutos Int
-  activo      Boolean     @default(true)
-  serviciosSucursal ServicioSucursal[]
+  id                  String              @id @default(uuid())
+  nombre              String
+  descripcion         String?
+  precioBase          Decimal             @default(0) @map("precio_base")
+  duracionMinutos     Int                 @map("duracion_minutos")
+  activo              Boolean             @default(true)
+  serviciosSucursal   ServicioSucursal[]
   serviciosMateriales ServicioMaterial[]
-  citas       Cita[]
+  citas               Cita[]
   promocionesServicios PromocionServicio[]
 
   @@map("servicios")
 }
 
 model ServicioSucursal {
-  servicioId  String
-  sucursalId  String
-  precio      Decimal
-  duracionMinutos Int
-  activo      Boolean  @default(true)
-  servicio    Servicio @relation(fields: [servicioId], references: [id], onDelete: Cascade)
-  sucursal    Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  servicioId      String
+  sucursalId      String
+  precio          Decimal
+  duracionMinutos Int      @map("duracion_minutos")
+  activo          Boolean  @default(true)
+  servicio        Servicio @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  sucursal        Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
 
   @@id([servicioId, sucursalId])
   @@map("servicios_sucursal")
 }
 
 model Material {
-  id              String    @id @default(uuid())
-  nombre          String
-  unidad          String
-  costoUnitario   Decimal   @default(0)
-  existencias     Existencia[]
+  id                  String             @id @default(uuid())
+  nombre              String
+  unidad              String
+  costoUnitario       Decimal            @default(0) @map("costo_unitario")
+  existencias         Existencia[]
   serviciosMateriales ServicioMaterial[]
 
   @@map("materiales")
 }
 
 model Existencia {
-  sucursalId String
-  materialId String
-  stockActual Decimal  @default(0)
-  stockMinimo Decimal  @default(0)
-  updatedAt  DateTime @updatedAt
-  sucursal   Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  sucursalId  String
+  materialId  String
+  stockActual Decimal  @default(0) @map("stock_actual")
+  stockMinimo Decimal  @default(0) @map("stock_minimo")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  sucursal    Sucursal @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  material    Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
 
   @@id([sucursalId, materialId])
   @@map("existencias")
@@ -167,15 +171,15 @@ model ServicioMaterial {
 }
 
 model Promocion {
-  id            String    @id @default(uuid())
-  nombre        String
-  descripcion   String?
-  descuento     Decimal
-  fechaInicio   DateTime
-  fechaFin      DateTime
-  estado        Boolean   @default(true)
-  sucursalId    String?
-  tipo          String
+  id                 String              @id @default(uuid())
+  nombre             String
+  descripcion        String?
+  descuento          Decimal
+  fechaInicio        DateTime            @map("fecha_inicio")
+  fechaFin           DateTime            @map("fecha_fin")
+  estado             Boolean             @default(true)
+  sucursalId         String?
+  tipo               String
   promocionServicios PromocionServicio[]
   promocionesAplicadas PromocionAplicada[]
 
@@ -194,23 +198,23 @@ model PromocionServicio {
 }
 
 model Cita {
-  id           String      @id @default(uuid())
-  usuarioId    String?
-  empleadoId   String?
-  sucursalId   String
-  servicioId   String?
-  fechaHora    DateTime
-  estado       CitaEstado  @default(pendiente)
-  total        Decimal     @default(0)
-  anticipo     Decimal     @default(0)
-  notas        String?
-  createdAt    DateTime    @default(now())
-  usuario      Usuario?    @relation(fields: [usuarioId], references: [id])
-  empleado     Empleado?   @relation(fields: [empleadoId], references: [id])
-  sucursal     Sucursal    @relation(fields: [sucursalId], references: [id])
-  servicio     Servicio?   @relation(fields: [servicioId], references: [id])
-  puntosMovimientos PuntosMovimiento[]
-  comisiones   Comision[]
+  id                   String              @id @default(uuid())
+  usuarioId            String?
+  empleadoId           String?
+  sucursalId           String
+  servicioId           String?
+  fechaHora            DateTime            @map("fecha_hora")
+  estado               CitaEstado          @default(pendiente)
+  total                Decimal             @default(0)
+  anticipo             Decimal             @default(0)
+  notas                String?
+  createdAt            DateTime            @default(now()) @map("created_at")
+  usuario              Usuario?            @relation(fields: [usuarioId], references: [id])
+  empleado             Empleado?           @relation(fields: [empleadoId], references: [id])
+  sucursal             Sucursal            @relation(fields: [sucursalId], references: [id])
+  servicio             Servicio?           @relation(fields: [servicioId], references: [id])
+  puntosMovimientos    PuntosMovimiento[]
+  comisiones           Comision[]
   promocionesAplicadas PromocionAplicada[]
 
   @@index([usuarioId])
@@ -222,14 +226,14 @@ model Cita {
 }
 
 model PromocionAplicada {
-  id                  UUID      @id @default(uuid())
-  citaId              String
-  promocionId         String?
-  porcentajeAplicado  Decimal?
-  montoDescontado     Decimal?
-  aplicadoEn          DateTime  @default(now())
-  cita                Cita      @relation(fields: [citaId], references: [id], onDelete: Cascade)
-  promocion           Promocion? @relation(fields: [promocionId], references: [id])
+  id                 String     @id @default(uuid())
+  citaId             String
+  promocionId        String?
+  porcentajeAplicado Decimal?   @map("porcentaje_aplicado")
+  montoDescontado    Decimal?   @map("monto_descontado")
+  aplicadoEn         DateTime   @default(now()) @map("aplicado_en")
+  cita               Cita       @relation(fields: [citaId], references: [id], onDelete: Cascade)
+  promocion          Promocion? @relation(fields: [promocionId], references: [id])
 
   @@index([citaId])
   @@index([promocionId])
@@ -237,16 +241,16 @@ model PromocionAplicada {
 }
 
 model PuntosMovimiento {
-  id          String         @id @default(uuid())
-  usuarioId   String
-  sucursalId  String
-  citaId      String
-  tipo        MovimientoTipo
-  cantidad    Int
-  fecha       DateTime       @default(now())
-  usuario     Usuario        @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  sucursal    Sucursal       @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  cita        Cita           @relation(fields: [citaId], references: [id], onDelete: Cascade)
+  id         String         @id @default(uuid())
+  usuarioId  String
+  sucursalId String
+  citaId     String
+  tipo       MovimientoTipo
+  cantidad   Int
+  fecha      DateTime       @default(now())
+  usuario    Usuario        @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  sucursal   Sucursal       @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  cita       Cita           @relation(fields: [citaId], references: [id], onDelete: Cascade)
 
   @@index([usuarioId])
   @@index([sucursalId])
@@ -255,14 +259,14 @@ model PuntosMovimiento {
 }
 
 model Comision {
-  id          String    @id @default(uuid())
-  empleadoId  String
-  citaId      String
-  porcentaje  Decimal
-  monto       Decimal
-  generadoEn  DateTime  @default(now())
-  empleado    Empleado  @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
-  cita        Cita      @relation(fields: [citaId], references: [id], onDelete: Cascade)
+  id            String                @id @default(uuid())
+  empleadoId    String
+  citaId        String
+  porcentaje    Decimal
+  monto         Decimal
+  generadoEn    DateTime              @default(now()) @map("generado_en")
+  empleado      Empleado              @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+  cita          Cita                  @relation(fields: [citaId], references: [id], onDelete: Cascade)
   liquidaciones LiquidacionComision[]
 
   @@index([empleadoId])
@@ -271,14 +275,14 @@ model Comision {
 }
 
 model Liquidacion {
-  id             String        @id @default(uuid())
-  empleadoId     String
-  periodoInicio  DateTime
-  periodoFin     DateTime
-  montoTotal     Decimal
-  generadoEn     DateTime      @default(now())
-  empleado       Empleado      @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
-  comisiones     LiquidacionComision[]
+  id            String                @id @default(uuid())
+  empleadoId    String
+  periodoInicio DateTime              @map("periodo_inicio")
+  periodoFin    DateTime              @map("periodo_fin")
+  montoTotal    Decimal               @map("monto_total")
+  generadoEn    DateTime              @default(now()) @map("generado_en")
+  empleado      Empleado              @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+  comisiones    LiquidacionComision[]
 
   @@index([empleadoId])
   @@map("liquidaciones")
@@ -302,7 +306,7 @@ model AuditLog {
   accion      String
   descripcion String?
   metadata    Json?
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime  @default(now()) @map("created_at")
   usuario     Usuario?  @relation(fields: [usuarioId], references: [id])
   sucursal    Sucursal? @relation(fields: [sucursalId], references: [id])
 
@@ -318,7 +322,7 @@ model Notificacion {
   tipo       String
   mensaje    String
   leida      Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  createdAt  DateTime @default(now()) @map("created_at")
   usuario    Usuario  @relation(fields: [usuarioId], references: [id])
   sucursal   Sucursal @relation(fields: [sucursalId], references: [id])
 
@@ -332,7 +336,7 @@ model AusenciaEmpleado {
   inicio     DateTime
   fin        DateTime
   motivo     String?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime @default(now()) @map("created_at")
   empleado   Empleado @relation(fields: [empleadoId], references: [id])
 
   @@index([empleadoId])
