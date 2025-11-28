@@ -1,5 +1,6 @@
 import { BranchSelector } from './components/branch_selector/branch_selector'
 import { InventoryForm } from './components/forms/inventory_form'
+import { AppointmentForm } from './components/forms/appointment_form'
 import { useAppointments } from './hooks/use_appointments'
 import { useBranch } from './contexts/branch.context'
 import { useAuth } from './contexts/auth.context'
@@ -96,6 +97,17 @@ export const App = () => {
 
       <section className="panel">
         <h2>Modelo de inventario</h2>
+        <InventoryForm />
+      </section>
+      <section className="panel">
+        <h2>Agendar Cita</h2> 
+        {/* Reemplazamos el InventoryForm por el nuevo formulario de citas */}
+        <AppointmentForm />
+      </section>
+      
+      {/* Opcional: Dejamos el InventoryForm en su propia sección por ahora */}
+      <section className="panel">
+        <h2>Modelo de inventario (Placeholder)</h2>
         <InventoryForm />
       </section>
     </main>

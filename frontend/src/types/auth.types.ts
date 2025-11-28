@@ -3,6 +3,7 @@
  * Alineado con la respuesta del endpoint /auth/login del backend.
  */
 export type User = {
+  id: string;
   email: string;
   nombre: string;
 };

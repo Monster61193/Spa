@@ -1,26 +1,32 @@
+import { PrismaService } from "../prisma/prisma.service";
 export declare class ServicesService {
-    catalogo(): {
+    private readonly prisma;
+    constructor(prisma: PrismaService);
+    catalogo(): Promise<{
         id: string;
         nombre: string;
+        descripcion: string | null;
         precioBase: number;
         duracionMinutos: number;
-    }[];
-    overrides(sucursalId?: string): {
+        activo: boolean;
+    }[]>;
+    overrides(sucursal_id?: string): Promise<{
+        activo: boolean;
+        sucursalId: string;
+        duracionMinutos: number;
+        servicioId: string;
+        precio: import("@prisma/client/runtime/library").Decimal;
+    }[]>;
+    crear_override(payload: {
         servicioId: string;
         sucursalId: string;
         precio: number;
         duracionMinutos: number;
-    }[];
-    crearOverride(payload: {
-        servicioId: string;
-        sucursalId: string;
-        precio: number;
-        duracionMinutos: number;
-    }): {
+    }): Promise<{
         activo: boolean;
         servicioId: string;
         sucursalId: string;
         precio: number;
         duracionMinutos: number;
-    };
+    }>;
 }

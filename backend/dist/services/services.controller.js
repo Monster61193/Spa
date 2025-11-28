@@ -16,17 +16,19 @@ exports.ServicesController = void 0;
 const common_1 = require("@nestjs/common");
 const services_service_1 = require("./services.service");
 let ServicesController = class ServicesController {
-    constructor(servicesService) {
-        this.servicesService = servicesService;
+    constructor(services_service) {
+        this.services_service = services_service;
     }
-    catalog() {
-        return { data: this.servicesService.catalogo() };
+    async catalog() {
+        const items = await this.services_service.catalogo();
+        return { items };
     }
-    overrides(sucursalId) {
-        return { overrides: this.servicesService.overrides(sucursalId) };
+    async overrides(sucursal_id) {
+        const overrides = await this.services_service.overrides(sucursal_id);
+        return { overrides };
     }
-    crearOverride(payload) {
-        return this.servicesService.crearOverride(payload);
+    crear_override(payload) {
+        return this.services_service.crear_override(payload);
     }
 };
 exports.ServicesController = ServicesController;
@@ -34,23 +36,23 @@ __decorate([
     (0, common_1.Get)(),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], ServicesController.prototype, "catalog", null);
 __decorate([
-    (0, common_1.Get)('overrides'),
-    __param(0, (0, common_1.Query)('sucursalId')),
+    (0, common_1.Get)("overrides"),
+    __param(0, (0, common_1.Query)("sucursalId")),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], ServicesController.prototype, "overrides", null);
 __decorate([
-    (0, common_1.Post)('overrides'),
+    (0, common_1.Post)("overrides"),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
-], ServicesController.prototype, "crearOverride", null);
+], ServicesController.prototype, "crear_override", null);
 exports.ServicesController = ServicesController = __decorate([
-    (0, common_1.Controller)('services'),
+    (0, common_1.Controller)("services"),
     __metadata("design:paramtypes", [services_service_1.ServicesService])
 ], ServicesController);

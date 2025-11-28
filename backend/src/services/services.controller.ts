@@ -1,34 +1,45 @@
-import { Controller, Get, Post, Body, Query } from '@nestjs/common'
-import { ServicesService } from './services.service'
+import { Controller, Get, Post, Body, Query } from "@nestjs/common";
+import { ServicesService } from "./services.service";
 
 /**
  * Endpoints para catálogo de servicios del Spa.
  */
-@Controller('services')
+@Controller("services")
 export class ServicesController {
-  constructor(private readonly servicesService: ServicesService) {}
+  constructor(private readonly services_service: ServicesService) {}
 
   /**
-   * Retorna el catálogo base (global).
+   * Retorna el catálogo base de servicios activos.
+   * GET /api/services
    */
   @Get()
-  catalog() {
-    return { data: this.servicesService.catalogo() }
+  async catalog() {
+    const items = await this.services_service.catalogo();
+    return { items };
   }
 
   /**
-   * Retorna los overrides por sucursal cuando se solicita un servicio específico.
+   * Retorna los overrides por sucursal.
    */
-  @Get('overrides')
-  overrides(@Query('sucursalId') sucursalId?: string) {
-    return { overrides: this.servicesService.overrides(sucursalId) }
+  @Get("overrides")
+  async overrides(@Query("sucursalId") sucursal_id?: string) {
+    const overrides = await this.services_service.overrides(sucursal_id);
+    return { overrides };
   }
 
   /**
-   * Crea un nuevo override para un servicio en una sucursal específica.
+   * Crea un nuevo override.
    */
-  @Post('overrides')
-  crearOverride(@Body() payload: { servicioId: string; sucursalId: string; precio: number; duracionMinutos: number }) {
-    return this.servicesService.crearOverride(payload)
+  @Post("overrides")
+  crear_override(
+    @Body()
+    payload: {
+      servicioId: string;
+      sucursalId: string;
+      precio: number;
+      duracionMinutos: number;
+    }
+  ) {
+    return this.services_service.crear_override(payload);
   }
 }

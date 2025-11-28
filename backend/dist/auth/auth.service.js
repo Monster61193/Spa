@@ -47,6 +47,7 @@ let AuthService = class AuthService {
         return {
             access_token: this.jwt_service.sign(token_payload),
             user: {
+                id: usuario_encontrado.id,
                 email: usuario_encontrado.email,
                 nombre: usuario_encontrado.nombre,
             },

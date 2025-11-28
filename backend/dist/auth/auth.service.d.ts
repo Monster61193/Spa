@@ -8,6 +8,7 @@ export declare class AuthService {
     login(payload: LoginDto): Promise<{
         access_token: string;
         user: {
+            id: string;
             email: string;
             nombre: string;
         };

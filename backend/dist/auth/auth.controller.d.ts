@@ -6,6 +6,7 @@ export declare class AuthController {
     login(payload: LoginDto): Promise<{
         access_token: string;
         user: {
+            id: string;
             email: string;
             nombre: string;
         };
