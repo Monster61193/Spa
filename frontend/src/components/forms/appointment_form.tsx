@@ -77,7 +77,7 @@ export const AppointmentForm = () => {
     <div className="appointment-form-container" style={{ maxWidth: '400px', margin: 'auto' }}>
       
       <form onSubmit={handleSubmit(handle_submit)} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        
+        <h3>Agendar Nueva Cita</h3>
         {/* Selector de Clientes */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
           <label htmlFor="cliente_id">Cliente</label>
