@@ -17,8 +17,8 @@ const common_1 = require("@nestjs/common");
 const appointments_service_1 = require("./appointments.service");
 const zod_1 = require("zod");
 const AgendarSchema = zod_1.z.object({
-    usuario_id: zod_1.z.string().uuid(),
-    servicio_id: zod_1.z.string().uuid(),
+    usuario_id: zod_1.z.string().min(1),
+    servicio_id: zod_1.z.string().min(1),
     fecha_hora: zod_1.z.string().datetime(),
 });
 let AppointmentsController = class AppointmentsController {

@@ -4,10 +4,20 @@ import { AppointmentsService } from "./appointments.service";
 import { z } from "zod";
 
 // Esquema de validación para crear cita (snake_case en propiedades)
+// ANTES (Causa el error con datos de prueba):
+/*
 const AgendarSchema = z.object({
   usuario_id: z.string().uuid(),
   servicio_id: z.string().uuid(),
-  fecha_hora: z.string().datetime(), // Espera formato ISO 8601 (2025-10-25T10:00:00Z)
+  fecha_hora: z.string().datetime()
+})
+*/
+
+// AHORA (Correcto para soportar seeds):
+const AgendarSchema = z.object({
+  usuario_id: z.string().min(1), // Acepta 'user-admin-id'
+  servicio_id: z.string().min(1), // Acepta 'serv-1'
+  fecha_hora: z.string().datetime(),
 });
 
 /**

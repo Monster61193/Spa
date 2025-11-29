@@ -19,16 +19,16 @@ export declare class AppointmentsController {
         branchId?: string;
     }): Promise<{
         id: string;
-        total: import("@prisma/client/runtime/library").Decimal;
-        createdAt: Date;
         usuarioId: string | null;
-        sucursalId: string;
         empleadoId: string | null;
+        sucursalId: string;
         servicioId: string | null;
-        estado: import(".prisma/client").$Enums.CitaEstado;
         fechaHora: Date;
+        estado: import(".prisma/client").$Enums.CitaEstado;
+        total: import("@prisma/client/runtime/library").Decimal;
         anticipo: import("@prisma/client/runtime/library").Decimal;
         notas: string | null;
+        createdAt: Date;
     }>;
     cerrar(payload: {
         citaId: string;

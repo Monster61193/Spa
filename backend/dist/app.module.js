@@ -23,13 +23,17 @@ const promotions_module_1 = require("./promotions/promotions.module");
 const services_module_1 = require("./services/services.module");
 const branch_guard_1 = require("./common/guards/branch.guard");
 const roles_guard_1 = require("./common/guards/roles.guard");
+const users_module_1 = require("./users/users.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            config_1.ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env', '.env.local'] }),
+            config_1.ConfigModule.forRoot({
+                isGlobal: true,
+                envFilePath: [".env", ".env.local"],
+            }),
             prisma_module_1.PrismaModule,
             auth_module_1.AuthModule,
             branches_module_1.BranchesModule,
@@ -40,11 +44,12 @@ exports.AppModule = AppModule = __decorate([
             points_module_1.PointsModule,
             commissions_module_1.CommissionsModule,
             audit_module_1.AuditModule,
-            notifications_module_1.NotificationsModule
+            notifications_module_1.NotificationsModule,
+            users_module_1.UsersModule,
         ],
         providers: [
             { provide: core_1.APP_GUARD, useClass: branch_guard_1.BranchGuard },
-            { provide: core_1.APP_GUARD, useClass: roles_guard_1.RolesGuard }
-        ]
+            { provide: core_1.APP_GUARD, useClass: roles_guard_1.RolesGuard },
+        ],
     })
 ], AppModule);
