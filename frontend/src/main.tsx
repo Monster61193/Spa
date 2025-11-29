@@ -5,6 +5,7 @@ import App from './App'
 import { queryClient } from './contexts/query_client'
 import { BranchProvider } from './contexts/branch.context'
 import { AuthProvider } from './contexts/auth.context'
+import { ThemeProvider } from './contexts/theme.context'
 
 // NOTA: Comentamos los mocks para que el frontend hable con tu backend real en localhost:3000
 // import { worker } from './mocks/browser'
@@ -14,11 +15,12 @@ import { AuthProvider } from './contexts/auth.context'
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <QueryClientProvider client={queryClient}>
-    {/* El AuthProvider envuelve todo para gestionar la sesión globalmente */}
+    <ThemeProvider>
     <AuthProvider>
       <BranchProvider>
         <App />
       </BranchProvider>
     </AuthProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 )

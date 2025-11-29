@@ -1,46 +1,162 @@
+/* =========================================
+   VARIABLES & TEMA (Dark/Light Mode)
+   ========================================= */
 :root {
-  font-family: 'Inter', system-ui, sans-serif;
-  color: #111;
-  background: #f4f6fb;
+  /* Paleta Clara (Default) */
+  --bg-body: #f4f6fb;
+  --bg-panel: #ffffff;
+  --text-primary: #111111;
+  --text-secondary: #64748b;
+  --border-color: rgba(0, 0, 0, 0.05);
+  --shadow-color: rgba(15, 23, 42, 0.08);
+  
+  --input-bg: #ffffff;
+  --input-border: #ccc;
+  
+  /* Colores de Estado */
+  --status-pending-bg: #fef08a;
+  --status-pending-text: #854d0e;
+  --status-confirmed-bg: #bbf7d0;
+  --status-confirmed-text: #14532d;
 }
 
+/* Paleta Oscura (data-theme="dark") */
+[data-theme='dark'] {
+  --bg-body: #0f172a;        /* Slate 900 */
+  --bg-panel: #1e293b;       /* Slate 800 */
+  --text-primary: #f1f5f9;   /* Slate 100 */
+  --text-secondary: #94a3b8; /* Slate 400 */
+  --border-color: #334155;
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  
+  --input-bg: #0f172a;
+  --input-border: #475569;
+
+  /* Colores de Estado (Ajustados para contraste oscuro) */
+  --status-pending-bg: #422006;
+  --status-pending-text: #fef08a;
+  --status-confirmed-bg: #052e16;
+  --status-confirmed-text: #bbf7d0;
+}
+
+/* =========================================
+   RESET & BASE
+   ========================================= */
 body {
   margin: 0;
-  background: #f4f6fb;
+  background: var(--bg-body);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 #root {
   min-height: 100vh;
 }
 
+/* Layout General */
+.layout-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
 .app-shell {
   max-width: 960px;
+  width: 100%;
   margin: 0 auto;
   padding: 2rem 1.5rem 3rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  box-sizing: border-box; /* Importante para que el padding no rompa el ancho */
 }
 
-.app-shell header {
-  background: #fff;
-  padding: 1.5rem;
-  border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
-}
+/* =========================================
+   COMPONENTES UI
+   ========================================= */
 
+/* Paneles (Tarjetas) */
 .panel {
-  background: #fff;
+  background: var(--bg-panel);
   padding: 1.5rem;
   border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 10px 30px var(--shadow-color);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease;
 }
 
-.branch-selector,
-.inventory-form {
+.panel-header {
   display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+/* Tipografía */
+.welcome-section {
+  margin-bottom: 2rem;
+}
+
+.subtitle {
+  color: var(--text-secondary);
+}
+
+.mt-2 {
+  margin-top: 0.5rem;
+}
+
+.text-center { text-align: center; }
+.text-secondary { color: var(--text-secondary); }
+.p-4 { padding: 1rem; }
+
+/* Botones */
+.btn-primary {
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: #1d4ed8;
+}
+
+.btn-danger {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.btn-danger:hover {
+  background-color: #dc2626;
+}
+
+/* Inputs & Selects */
+input, select {
+  background-color: var(--input-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--input-border);
+  padding: 0.6rem;
+  border-radius: 6px;
+  width: 100%; /* Full width por defecto en formularios */
+  box-sizing: border-box;
+}
+
+/* =========================================
+   TABLAS & ESTADOS
+   ========================================= */
+.table-responsive {
+  overflow-x: auto;
 }
 
 table {
@@ -49,9 +165,175 @@ table {
   margin-top: 1rem;
 }
 
-th,
-td {
-  padding: 0.75rem;
+th, td {
+  padding: 1rem;
   text-align: left;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+/* Badges de Estado */
+.badge-status {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: bold;
+  display: inline-block;
+}
+
+.status-pendiente {
+  background-color: var(--status-pending-bg);
+  color: var(--status-pending-text);
+}
+
+.status-confirmada { /* Asumiendo que el backend devuelva 'confirmada' en el futuro */
+  background-color: var(--status-confirmed-bg);
+  color: var(--status-confirmed-text);
+}
+
+/* =========================================
+   MODAL (Usando React Portal)
+   ========================================= */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal-content {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  padding: 2rem;
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: color 0.2s;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.modal-close:hover {
+  background-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+/* =========================================
+   HEADER ADMIN (Layout/Header.tsx)
+   ========================================= */
+.admin-header {
+  background-color: var(--bg-panel);
+  height: 60px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 1.5rem;
+  box-shadow: 0 1px 4px var(--shadow-color);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  transition: background-color 0.3s ease;
+}
+
+.header-left, .header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.nav-link {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.nav-link:hover {
+  color: var(--text-primary);
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  transition: background 0.2s, color 0.2s;
+}
+
+.icon-btn:hover {
+  background-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.badge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background-color: #eab308;
+  color: white;
+  font-size: 0.6rem;
+  font-weight: bold;
+  padding: 2px 5px;
+  border-radius: 10px;
+  line-height: 1;
+}
+
+.badge-danger { background-color: #ef4444; }
+.badge-success { background-color: #22c55e; }
+
+/* Separador vertical en el header */
+.header-separator {
+  width: 1px;
+  height: 24px;
+  background-color: var(--border-color);
+}
+
+/* Animaciones */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }

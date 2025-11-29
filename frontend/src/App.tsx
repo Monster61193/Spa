@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BranchSelector } from './components/branch_selector/branch_selector'
 import { InventoryForm } from './components/forms/inventory_form'
 import { AppointmentForm } from './components/forms/appointment_form'
@@ -5,18 +6,30 @@ import { useAppointments } from './hooks/use_appointments'
 import { useBranch } from './contexts/branch.context'
 import { useAuth } from './contexts/auth.context'
 import { LoginPage } from './pages/login_page'
+import { Modal } from './components/ui/modal'
+import { Header } from './components/layout/header'
 
 /**
  * Vista principal de la aplicación.
- * Actúa como "Layout Protegido": si no hay usuario, muestra Login.
+ * Orquesta la navegación, autenticación y layout principal.
+ *
+ * Estructura:
+ * - Header: Navegación y herramientas globales.
+ * - Main: Contenedor principal con padding.
+ * - Secciones: Paneles de contenido (Citas, Inventario).
  */
 export const App = () => {
-  // Obtenemos el estado de autenticación
-  const { is_authenticated, user, logout } = useAuth()
+  // Obtenemos el estado de autenticación y funciones de sesión
+  const { is_authenticated, user } = useAuth()
+  
+  // Obtenemos el contexto de la sucursal activa
   const { activeBranch } = useBranch()
   
-  // Consumimos citas (ahora vendrán del backend real)
+  // Consumimos las citas de la sucursal activa (vienen del backend real)
   const { data: appointments = [], isLoading } = useAppointments()
+  
+  // Estado local para controlar la visibilidad del modal de "Agendar Cita"
+  const [is_modal_open, set_is_modal_open] = useState(false)
 
   // 1. BLOQUEO DE SEGURIDAD:
   // Si NO está autenticado, mostramos Login y detenemos la renderización del dashboard.
@@ -24,93 +37,106 @@ export const App = () => {
     return <LoginPage />
   }
 
-  // 2. DASHBOARD (Solo visible si hay sesión):
+  // 2. DASHBOARD (Solo visible si hay sesión activa):
   return (
-    <main className="app-shell">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1>Agenda Cinco Estrellas</h1>
-          <p className="subtitle">Bienvenido, {user?.nombre}</p>
-        </div>
-        <button 
-          onClick={logout} 
-          style={{ 
-            padding: '0.5rem 1rem', 
-            cursor: 'pointer',
-            backgroundColor: '#ef4444',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px'
-          }}
-        >
-          Salir
-        </button>
-      </header>
-
-      {/* Sección de Selección de Sucursal */}
-      <section className="panel" style={{ marginTop: '1rem' }}>
-        <BranchSelector />
-        {activeBranch ? (
-          <p className="subtitle" style={{ marginTop: '0.5rem' }}>
-            Operando en: <strong>{activeBranch.nombre}</strong>
-          </p>
-        ) : (
-          <p className="subtitle">Cargando sucursales...</p>
-        )}
-      </section>
-
-      <section className="panel">
-        <h2>Citas por sucursal</h2>
-        {isLoading ? (
-          <p>Cargando citas...</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Servicio</th>
-                <th>Cliente</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {appointments.length > 0 ? (
-                appointments.map((appointment) => (
-                  <tr key={appointment.id}>
-                    <td>{new Date(appointment.fechaHora).toLocaleString()}</td>
-                    <td>{appointment.servicio}</td>
-                    <td>{appointment.cliente}</td>
-                    <td>{appointment.estado}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
-                    No hay citas registradas en esta sucursal.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      <section className="panel">
-        <h2>Modelo de inventario</h2>
-        <InventoryForm />
-      </section>
-      <section className="panel">
-        <h2>Agendar Cita</h2> 
-        {/* Reemplazamos el InventoryForm por el nuevo formulario de citas */}
-        <AppointmentForm />
-      </section>
+    <div className="layout-root">
       
-      {/* Opcional: Dejamos el InventoryForm en su propia sección por ahora */}
-      <section className="panel">
-        <h2>Modelo de inventario (Placeholder)</h2>
-        <InventoryForm />
-      </section>
-    </main>
+      {/* HEADER DE NAVEGACIÓN */}
+      <Header />
+
+      {/* CONTENIDO PRINCIPAL */}
+      <main className="app-shell">
+        
+        {/* Título de Bienvenida */}
+        <div className="welcome-section">
+          <h1>Agenda Cinco Estrellas</h1>
+          <p className="subtitle">Bienvenido de nuevo, {user?.nombre}</p>
+        </div>
+
+        {/* Panel de Selección de Sucursal */}
+        <section className="panel">
+          <BranchSelector />
+          {activeBranch ? (
+            <p className="subtitle mt-2">
+              Operando en: <strong>{activeBranch.nombre}</strong>
+            </p>
+          ) : (
+            <p className="subtitle">Cargando sucursales...</p>
+          )}
+        </section>
+
+        {/* Panel de Gestión de Citas */}
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Citas por sucursal</h2>
+            
+            {/* Botón para abrir el Modal de Agendar */}
+            <button 
+              className="btn-primary"
+              onClick={() => set_is_modal_open(true)}
+            >
+              + Nueva Cita
+            </button>
+          </div>
+
+          {/* Tabla de Citas */}
+          {isLoading ? (
+            <p>Cargando citas...</p>
+          ) : (
+            <div className="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Servicio</th>
+                    <th>Cliente</th>
+                    <th className="text-center">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {appointments.length > 0 ? (
+                    appointments.map((appointment) => (
+                      <tr key={appointment.id}>
+                        <td>{new Date(appointment.fechaHora).toLocaleString()}</td>
+                        <td>{appointment.servicio}</td>
+                        <td>{appointment.cliente}</td>
+                        <td className="text-center">
+                          <span className={`badge-status status-${appointment.estado}`}>
+                            {appointment.estado}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="text-center p-4 text-secondary">
+                        No hay citas registradas en esta sucursal.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {/* Panel de Inventario (Placeholder) */}
+        <section className="panel">
+          <h2>Modelo de inventario</h2>
+          <InventoryForm />
+        </section>
+
+        {/* MODAL DE AGENDAR CITA */}
+        <Modal 
+          is_open={is_modal_open} 
+          on_close={() => set_is_modal_open(false)}
+          title="" // El título ya está incluido en el formulario interno
+        >
+          <AppointmentForm />
+        </Modal>
+
+      </main>
+    </div>
   )
 }
 
