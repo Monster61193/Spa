@@ -1,6 +1,7 @@
-# Ignorar archivos de macOS
+node_modules/
+dist/
+build/
+.vite/
+.env
 .DS_Store
-
-# (Opcional) Si usas Node.js, ignora la carpeta de dependencias
-/node_modules
-
+*.log
