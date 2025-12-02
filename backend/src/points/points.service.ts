@@ -4,7 +4,7 @@ import { MovimientoTipo } from "@prisma/client";
 
 /**
  * Servicio encargado de la gestión y consulta de puntos de lealtad.
- * Calcula saldos en tiempo real basándose en el historial de movimientos (Event Sourcing simplificado).
+ * Calcula saldos en tiempo real basándose en el historial de movimientos.
  */
 @Injectable()
 export class PointsService {
@@ -12,11 +12,12 @@ export class PointsService {
 
   /**
    * Obtiene el historial de movimientos de puntos para una sucursal.
-   * Útil para auditoría y vistas de detalle.
+   * Útil para auditoría y vistas de detalle en el frontend.
    *
    * @param sucursal_id - ID de la sucursal activa.
    */
   async history(sucursal_id: string) {
+    // Consulta a la tabla real 'puntos_movimientos'
     const historial = await this.prisma.puntosMovimiento.findMany({
       where: { sucursalId: sucursal_id },
       include: {
@@ -30,7 +31,7 @@ export class PointsService {
     return historial.map((mov) => ({
       id: mov.id,
       cliente: mov.usuario.nombre,
-      tipo: mov.tipo, // 'earn' | 'redeem'
+      tipo: mov.tipo, // 'earn' (ganado) | 'redeem' (usado)
       cantidad: mov.cantidad,
       fecha: mov.fecha,
       cita_fecha: mov.cita ? mov.cita.fechaHora : null,
@@ -39,7 +40,7 @@ export class PointsService {
 
   /**
    * Calcula el saldo actual de puntos por cliente en una sucursal.
-   * Realiza una agregación en memoria (o DB) de: Ganados - Usados.
+   * Realiza una agregación en memoria: (Total Ganado - Total Usado).
    *
    * @param sucursal_id - ID de la sucursal activa.
    */
@@ -52,14 +53,15 @@ export class PointsService {
       },
     });
 
-    // 2. Agrupamos y calculamos saldo por usuario en memoria
-    // Nota: Para escalas masivas, esto se movería a una Raw Query de SQL (SUM CASE...)
+    // 2. Agrupamos y calculamos saldo por usuario
+    // Usamos un Map para acumular los totales por cliente
     const saldos_map = new Map<string, { cliente: string; puntos: number }>();
 
     for (const mov of movimientos) {
       const usuario_id = mov.usuarioId;
       const nombre_cliente = mov.usuario.nombre;
 
+      // Inicializamos si es el primer movimiento del usuario
       if (!saldos_map.has(usuario_id)) {
         saldos_map.set(usuario_id, { cliente: nombre_cliente, puntos: 0 });
       }
@@ -74,7 +76,7 @@ export class PointsService {
       }
     }
 
-    // 3. Retornamos solo los clientes que tienen saldo positivo
+    // 3. Filtramos solo los clientes con saldo positivo para mostrar en el reporte
     const lista_saldos = Array.from(saldos_map.values()).filter(
       (item) => item.puntos > 0
     );

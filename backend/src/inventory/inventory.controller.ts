@@ -1,20 +1,22 @@
-import { Controller, Get, Req } from '@nestjs/common'
-import type { Request } from 'express'
-import { InventoryService } from './inventory.service'
+import { Controller, Get, Req } from "@nestjs/common";
+import type { Request } from "express";
+import { InventoryService } from "./inventory.service";
 
-/**
- * Punto de acceso para inventario por sucursal.
- */
-@Controller('inventory')
+@Controller("inventory")
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
   /**
    * Retorna snapshot de materiales por sucursal.
+   * CORRECCIÓN: Agregamos async/await para resolver la promesa del servicio.
    */
   @Get()
-  listar(@Req() request: Request & { branchId?: string }) {
-    const branchId = request.branchId ?? 'branch-principal'
-    return { snapshot: this.inventoryService.listar(branchId) }
+  async listar(@Req() request: Request & { branchId?: string }) {
+    const branchId = request.branchId ?? "branch-principal";
+
+    // Await: Esperamos a que la DB responda antes de enviar el JSON
+    const datos = await this.inventoryService.listar(branchId);
+
+    return { snapshot: datos };
   }
 }

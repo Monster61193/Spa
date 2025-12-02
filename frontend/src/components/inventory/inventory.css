@@ -1,0 +1,98 @@
+/* Contenedor de mensajes (Carga/Vacío) */
+.inventory-message {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.inventory-empty {
+  padding: 3rem;
+  text-align: center;
+}
+
+.inventory-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.inventory-empty-title {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.inventory-empty-text {
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+}
+
+/* Tabla */
+.inventory-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.inventory-header-row {
+  border-bottom: 2px solid var(--border-color);
+}
+
+.inventory-th {
+  padding: 1rem;
+  text-align: center;
+}
+.inventory-th.text-left {
+  text-align: left;
+}
+
+.inventory-row {
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.2s;
+}
+.inventory-row:hover {
+  background-color: #f8fafc; /* Color suave al pasar el mouse */
+}
+
+.inventory-cell {
+  padding: 1rem;
+  color: var(--text-primary);
+}
+
+.inventory-cell-name {
+  font-weight: 500;
+}
+
+.inventory-cell-unit,
+.inventory-cell-min {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.inventory-cell-stock {
+  text-align: center;
+  font-weight: bold;
+  font-size: 1.05rem;
+}
+.inventory-cell-stock.critical {
+  color: #dc2626;
+}
+
+/* Badges (Etiquetas de estado) */
+.inventory-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.inventory-badge--warning {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.inventory-badge--success {
+  background-color: #dcfce7;
+  color: #166534;
+}

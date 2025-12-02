@@ -11,12 +11,12 @@ export class PromotionsService {
 
   /**
    * Lista las promociones activas y vigentes para una sucursal.
-   * Regla de Negocio:
-   * 1. Estado = true
-   * 2. Fecha actual dentro del rango [inicio, fin]
-   * 3. Scope: Es global (sucursalId null) O pertenece a esta sucursal.
+   * Reglas de Negocio:
+   * 1. Estado activo (true).
+   * 2. Fecha actual dentro del rango [inicio, fin].
+   * 3. Alcance: Es global (sucursalId null) O pertenece específicamente a esta sucursal.
    *
-   * @param sucursal_id - ID de la sucursal activa (opcional, si no viene trae solo globales).
+   * @param sucursal_id - ID de la sucursal activa (opcional).
    */
   async listar(sucursal_id?: string) {
     const hoy = new Date();
@@ -24,11 +24,11 @@ export class PromotionsService {
     const promociones = await this.prisma.promocion.findMany({
       where: {
         estado: true, // Solo activas
-        fechaInicio: { lte: hoy }, // Ya empezaron
-        fechaFin: { gte: hoy }, // No han terminado
+        fechaInicio: { lte: hoy }, // Que ya hayan empezado
+        fechaFin: { gte: hoy }, // Que no hayan terminado
         OR: [
-          { sucursalId: null }, // Promociones Globales (Cadena)
-          { sucursalId: sucursal_id }, // Promociones Locales
+          { sucursalId: null }, // Promociones Globales (toda la cadena)
+          { sucursalId: sucursal_id }, // Promociones Locales (solo esta sede)
         ],
       },
       orderBy: {
@@ -36,12 +36,12 @@ export class PromotionsService {
       },
     });
 
-    // Mapeo simple (aunque Prisma ya devuelve el objeto correcto, aseguramos tipos)
+    // Mapeo de respuesta
     return promociones.map((p) => ({
       id: p.id,
       nombre: p.nombre,
-      descuento: Number(p.descuento), // Decimal -> Number
-      vigente: true, // Implícito por el filtro
+      descuento: Number(p.descuento), // Convertimos Decimal a Number JS
+      vigente: true,
       alcance: p.sucursalId ? "Local" : "Global",
     }));
   }
