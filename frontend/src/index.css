@@ -9,10 +9,10 @@
   --text-secondary: #64748b;
   --border-color: rgba(0, 0, 0, 0.05);
   --shadow-color: rgba(15, 23, 42, 0.08);
-  
+
   --input-bg: #ffffff;
   --input-border: #ccc;
-  
+
   /* Colores de Estado */
   --status-pending-bg: #fef08a;
   --status-pending-text: #854d0e;
@@ -22,13 +22,13 @@
 
 /* Paleta Oscura (data-theme="dark") */
 [data-theme='dark'] {
-  --bg-body: #0f172a;        /* Slate 900 */
-  --bg-panel: #1e293b;       /* Slate 800 */
-  --text-primary: #f1f5f9;   /* Slate 100 */
+  --bg-body: #0f172a; /* Slate 900 */
+  --bg-panel: #1e293b; /* Slate 800 */
+  --text-primary: #f1f5f9; /* Slate 100 */
   --text-secondary: #94a3b8; /* Slate 400 */
   --border-color: #334155;
   --shadow-color: rgba(0, 0, 0, 0.3);
-  
+
   --input-bg: #0f172a;
   --input-border: #475569;
 
@@ -47,7 +47,9 @@ body {
   background: var(--bg-body);
   color: var(--text-primary);
   font-family: 'Inter', system-ui, sans-serif;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
 }
 
 #root {
@@ -106,9 +108,15 @@ body {
   margin-top: 0.5rem;
 }
 
-.text-center { text-align: center; }
-.text-secondary { color: var(--text-secondary); }
-.p-4 { padding: 1rem; }
+.text-center {
+  text-align: center;
+}
+.text-secondary {
+  color: var(--text-secondary);
+}
+.p-4 {
+  padding: 1rem;
+}
 
 /* Botones */
 .btn-primary {
@@ -142,7 +150,8 @@ body {
 }
 
 /* Inputs & Selects */
-input, select {
+input,
+select {
   background-color: var(--input-bg);
   color: var(--text-primary);
   border: 1px solid var(--input-border);
@@ -165,7 +174,8 @@ table {
   margin-top: 1rem;
 }
 
-th, td {
+th,
+td {
   padding: 1rem;
   text-align: left;
   border-bottom: 1px solid var(--border-color);
@@ -186,7 +196,8 @@ th, td {
   color: var(--status-pending-text);
 }
 
-.status-confirmada { /* Asumiendo que el backend devuelva 'confirmada' en el futuro */
+.status-confirmada {
+  /* Asumiendo que el backend devuelva 'confirmada' en el futuro */
   background-color: var(--status-confirmed-bg);
   color: var(--status-confirmed-text);
 }
@@ -205,7 +216,9 @@ th, td {
   justify-content: center;
   align-items: center;
   z-index: 9999;
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
+
   animation: fadeIn 0.2s ease-out;
 }
 
@@ -214,14 +227,16 @@ th, td {
   color: var(--text-primary);
   padding: 2rem;
   border-radius: 16px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
   width: 90%;
   max-width: 500px;
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
-  
+
   animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -265,7 +280,8 @@ th, td {
   transition: background-color 0.3s ease;
 }
 
-.header-left, .header-right {
+.header-left,
+.header-right {
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -296,7 +312,9 @@ th, td {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 
 .icon-btn:hover {
@@ -317,8 +335,12 @@ th, td {
   line-height: 1;
 }
 
-.badge-danger { background-color: #ef4444; }
-.badge-success { background-color: #22c55e; }
+.badge-danger {
+  background-color: #ef4444;
+}
+.badge-success {
+  background-color: #22c55e;
+}
 
 /* Separador vertical en el header */
 .header-separator {
@@ -329,11 +351,65 @@ th, td {
 
 /* Animaciones */
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* =========================================
+   MODAL FEEDBACK (Alertas)
+   ========================================= */
+.feedback-content {
+  text-align: center;
+  padding: 1rem 0;
+}
+
+.feedback-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.feedback-message {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+  white-space: pre-wrap; /* Respeta saltos de línea del backend */
+  line-height: 1.5;
+}
+
+/* Colores de Título dinámicos (opcional, si el Modal renderiza el h2 fuera del children) */
+.feedback-success h2 {
+  color: #22c55e;
+}
+.feedback-warning h2 {
+  color: #eab308;
+}
+.feedback-error h2 {
+  color: #ef4444;
+}
+
+@keyframes popIn {
+  from {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }

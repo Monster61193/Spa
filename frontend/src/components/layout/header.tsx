@@ -1,70 +1,61 @@
-import { useAuth } from '../../contexts/auth.context'
-import { ThemeToggle } from '../ui/theme_toggle'
+import { useAuth } from '../../contexts/auth.context';
+import { ThemeToggle } from '../ui/theme_toggle';
 
 /**
- * Componente Header estilo "Admin Dashboard".
- * Incluye navegación izquierda, búsqueda y notificaciones a la derecha.
+ * Header simplificado con información de usuario y tema.
  */
 export const Header = () => {
-  const { logout } = useAuth()
+  const { user, logout } = useAuth();
 
   return (
     <header className="admin-header">
-      {/* SECCIÓN IZQUIERDA: Menú y Links */}
+      {/* IZQUIERDA: Menú y Título */}
       <div className="header-left">
         <button className="icon-btn" title="Menú">
-          ☰ {/* Icono de hamburguesa */}
+          ☰
         </button>
-        <span className="nav-link">Home</span>
-        <span className="nav-link">Contact</span>
+        <span className="nav-link" style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
+          DANAE SPA
+        </span>
       </div>
 
-      {/* SECCIÓN DERECHA: Herramientas y Perfil */}
-      <div className="header-right">
-        
-        {/* Búsqueda */}
-        <button className="icon-btn" title="Buscar">
-          🔍
-        </button>
+      {/* DERECHA: Usuario y Controles (Eliminados Buscar y Pantalla Completa) */}
+      <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        {/* Información del Usuario (Añadido) */}
+        <div style={{ textAlign: 'right', marginRight: '0.5rem' }}>
+          <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{user?.nombre || 'Administrador'}</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{user?.email}</div>
+        </div>
 
-        {/* Chat / Mensajes */}
-        <button className="icon-btn" title="Mensajes">
-          💬
-          <span className="badge badge-danger">3</span>
-        </button>
+        {/* Separador */}
+        <div
+          className="header-separator"
+          style={{ width: '1px', height: '20px', backgroundColor: 'var(--text-secondary)' }}
+        ></div>
 
-        {/* Notificaciones */}
-        <button className="icon-btn" title="Notificaciones">
-          🔔
-          <span className="badge">15</span>
-        </button>
-
-        {/* Pantalla completa (Simulado) */}
-        <button className="icon-btn" title="Pantalla Completa">
-          ⛶
-        </button>
-
-        {/* Separador visual */}
-        <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border-color)' }}></div>
-
-        {/* Toggle de Tema (Nuestra funcionalidad personalizada) */}
+        {/* Toggle Tema */}
         <ThemeToggle />
 
-        {/* Botón Salir */}
-        <button 
+        {/* Logout */}
+        <button
           onClick={logout}
+          title="Cerrar Sesión"
+          className="btn-logout" // Usar una clase para styling en CSS
           style={{
             fontSize: '0.9rem',
             color: '#ef4444',
-            background: 'none',
+            background: 'rgba(239, 68, 68, 0.1)',
             border: 'none',
+            padding: '0.5rem 1rem',
+            borderRadius: '6px',
             cursor: 'pointer',
-            fontWeight: 'bold'
+            fontWeight: 'bold',
+            marginLeft: '0.5rem',
           }}
         >
           Salir
         </button>
       </div>
     </header>
-  )
-}
+  );
+};

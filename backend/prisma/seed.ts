@@ -148,6 +148,94 @@ async function main() {
       })
     )
   );
+
+  // 6. VINCULACIÓN: Servicios consumen Materiales (RECETA)
+  console.log("🔗 Vinculando Servicios con Materiales...");
+
+  const servicio_manicure = "serv-1";
+  const material_gel = "branch-principal-gel-uñas";
+  const material_esponja = "branch-principal-esponjas-termales";
+
+  const recetas = [
+    { servicioId: servicio_manicure, materialId: material_gel, cantidad: 10 },
+    {
+      servicioId: servicio_manicure,
+      materialId: material_esponja,
+      cantidad: 2,
+    },
+  ];
+
+  for (const receta of recetas) {
+    await prisma.servicioMaterial.upsert({
+      where: {
+        servicioId_materialId: {
+          servicioId: receta.servicioId,
+          materialId: receta.materialId,
+        },
+      },
+      update: { cantidad: receta.cantidad },
+      create: {
+        servicioId: receta.servicioId,
+        materialId: receta.materialId,
+        cantidad: receta.cantidad,
+      },
+    });
+  }
+  console.log("✅ Recetas de servicios cargadas.");
+
+  // 7. INVENTARIO INICIAL (STOCK)
+  // Esto soluciona el error "No tiene registro en esta sucursal"
+  console.log("📦 Llenando inventario inicial...");
+
+  const inventario_inicial = [
+    {
+      sucursalId: "branch-principal",
+      materialId: "branch-principal-gel-uñas", // El ID que dio error en tu captura
+      nombreMaterial: "Gel Uñas",
+      stock: 500, // Suficiente para muchas citas
+      minimo: 20,
+    },
+    {
+      sucursalId: "branch-principal",
+      materialId: "branch-principal-esponjas-termales",
+      nombreMaterial: "Esponjas Termales",
+      stock: 200,
+      minimo: 50,
+    },
+  ];
+
+  for (const item of inventario_inicial) {
+    // 1. Aseguramos que el Material exista globalmente
+    await prisma.material.upsert({
+      where: { id: item.materialId },
+      update: {},
+      create: {
+        id: item.materialId,
+        nombre: item.nombreMaterial,
+        unidad: "ml/pz",
+        costoUnitario: 50,
+      },
+    });
+
+    // 2. Aseguramos que la Sucursal tenga Existencia (Stock) de ese material
+    await prisma.existencia.upsert({
+      where: {
+        sucursalId_materialId: {
+          sucursalId: item.sucursalId,
+          materialId: item.materialId,
+        },
+      },
+      update: { stockActual: item.stock }, // Reseteamos stock al correr seed
+      create: {
+        sucursalId: item.sucursalId,
+        materialId: item.materialId,
+        stockActual: item.stock,
+        stockMinimo: item.minimo,
+      },
+    });
+  }
+
+  console.log("✅ Inventario cargado. ¡Listo para vender!");
 }
 
 main()
