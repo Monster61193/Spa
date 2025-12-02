@@ -54,38 +54,37 @@ This document serves as a central place for me (Gemini) to track my understandin
 
 # Gemini's Project Context for Danae Spa
 
-## 1. Project Status: MVP + Sprint 1 (Backend Ready)
+## 1. Project Status: SPRINT 1 COMPLETED ✅
 
-- **Current Phase:** Sprint 1 - Multi-service Appointments.
-- **Backend:** Refactoring completed. `CitaServicio` introduced. Logic supports N items per appointment.
-- **Frontend:** Pending update. `AppointmentForm` still selects a single service.
-- **Database:** PostgreSQL schema migrated to 1:N relation for Appointments <-> Services.
+- **Current Phase:** Transitioning to **Sprint 2: Operational Management**.
+- **Backend:** Fully supports 1:N relations (Appointments <-> Services) with transactional closing.
+- **Frontend:** `AppointmentForm` refactored to "Service Cart" model with real-time totals.
+- **Database:** Schema migrated (`citas_servicios` table created).
 
 ## 2. Architecture & Rules (Ref: AGENTS.md)
 
-- **Multi-tenancy:** strict usage of `X-Branch-Id`.
-- **Code Style:** `snake_case` for logic, `PascalCase` for components. JSDoc required.
-- **Resilience:** Graceful degradation (Mocks) if DB fails on read operations.
+- **Multi-tenancy:** Strict usage of `X-Branch-Id` in headers.
+- **Code Style:** `snake_case` logic, `PascalCase` components, strict JSDoc.
+- **Testing:** E2E (Playwright) + Integration (Vitest) required for new features.
 
-## 3. Plan of Action (Updated)
+## 3. Roadmap Progress
 
-### Completed Tasks
+### ✅ SPRINT 1: FLEXIBILITY (Multi-Service)
 
-- [x] **Backend:** Schema refactor (1:N Citas-Servicios).
-- [x] **Backend:** Update `AppointmentsService` (agendar/cerrar) for multi-services.
-- [x] **Backend:** Update `AppointmentsController` with Zod array validation.
-- [x] **Testing:** Backend Unit tests adapted for nested service structure.
+- [x] **DB:** Refactor `schema.prisma` (Explicit M:N relation `CitaServicio`).
+- [x] **Backend:** Update `AppointmentsService.agendar` to accept `servicios_ids[]`.
+- [x] **Backend:** Update `AppointmentsService.cerrar` to deduct stock for multiple items.
+- [x] **Frontend:** Refactor `AppointmentForm` to support dynamic service addition (Cart Pattern).
 
-### Pending Tasks (Next Steps)
+### 🚀 SPRINT 2: OPERATIONAL CONTROL (Next Up)
 
-1.  **Frontend Refactor (Critical):**
-    - [ ] Update `AppointmentForm.tsx` to handle an array of services (Dynamic inputs or Multi-select).
-    - [ ] Update `use_appointments.ts` hook if response structure changed significantly.
-    - [ ] Verify `AppointmentForm.spec.tsx`.
-2.  **Documentation:**
-    - [ ] Verify `context/api_contracts.md` reflects the new payload shape.
+**Objective:** Empower receptionists to manage active appointments before payment.
+
+- [ ] **UI:** Create "Appointment Details" Modal (View/Edit).
+- [ ] **Backend:** Endpoint `PATCH /appointments/:id/items` to modify services in an open appointment.
+- [ ] **Frontend:** Add "Edit" button in the dashboard table.
 
 ## 4. Technical Debt / Watchlist
 
-- Ensure `ServicesService.catalogo` is performant if the list grows.
-- Review `InventoryService` logic: currently, if _one_ material is missing, the whole transaction fails (Intended behavior for consistency).
+- **Performance:** Monitor `AppointmentsService.listar` query time as history grows (consider pagination).
+- **Inventory:** Currently, stock validation blocks the sale (Strict Mode). Discuss "Negative Stock" override for Admins.
