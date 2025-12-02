@@ -1,13 +1,15 @@
 import { Module } from "@nestjs/common";
 import { PromotionsController } from "./promotions.controller";
 import { PromotionsService } from "./promotions.service";
-import { PrismaModule } from "../prisma/prisma.module"; // <--- Importar BD
+// Importación requerida para inyectar PrismaService
+import { PrismaModule } from "../prisma/prisma.module";
 
 /**
- * Módulo de promociones y campañas.
+ * Módulo de Promociones.
+ * Gestiona las campañas de descuento globales y locales.
  */
 @Module({
-  imports: [PrismaModule], // <--- Registrar BD
+  imports: [PrismaModule], // <--- Registro explícito de dependencias
   controllers: [PromotionsController],
   providers: [PromotionsService],
 })

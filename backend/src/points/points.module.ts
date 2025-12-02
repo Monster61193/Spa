@@ -1,13 +1,15 @@
 import { Module } from "@nestjs/common";
 import { PointsController } from "./points.controller";
 import { PointsService } from "./points.service";
-import { PrismaModule } from "../prisma/prisma.module"; // <--- Importar el módulo de BD
+// Importación requerida para inyectar PrismaService
+import { PrismaModule } from "../prisma/prisma.module";
 
 /**
- * Módulo que gestiona puntos de lealtad por sucursal.
+ * Módulo de Puntos.
+ * Agrupa la lógica de fidelización y expone los endpoints correspondientes.
  */
 @Module({
-  imports: [PrismaModule], // <--- Registrar aquí para poder usar PrismaService
+  imports: [PrismaModule], // <--- Registro explícito de dependencias
   controllers: [PointsController],
   providers: [PointsService],
 })

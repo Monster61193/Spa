@@ -8,99 +8,153 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CitaEstado, MovimientoTipo } from "@prisma/client";
 
 /**
- * Servicio encargado de la gestión del ciclo de vida de las citas.
- * Centraliza la lógica de negocio para agendar, consultar y cerrar ventas.
+ * Servicio de Dominio: Gestión de Citas (Appointments).
+ * -----------------------------------------------------------------------------
+ * Centraliza la lógica transaccional para el ciclo de vida de la cita:
+ * Agendar -> Validar -> Cerrar (Venta).
+ *
+ * Actualizado para SPRINT 1: Soporte de Múltiples Servicios por Cita.
  */
 @Injectable()
 export class AppointmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Obtiene el listado de citas filtrado por sucursal.
-   * Utiliza proyección (select) para optimizar la carga de datos.
+   * Lista las citas de una sucursal, formateando la respuesta para el Frontend.
+   *
+   * CAMBIO SPRINT 1:
+   * Ahora concatena los nombres de los múltiples servicios en un solo string
+   * para mantener la compatibilidad visual con la tabla actual.
    *
    * @param sucursal_id - ID de la sucursal activa (header X-Branch-Id).
+   * @returns Lista de citas con detalles planos.
    */
   async listar(sucursal_id: string) {
-    const citas = await this.prisma.cita.findMany({
+    // BLOQUE 1: Consulta Optimizada
+    const citas_db = await this.prisma.cita.findMany({
       where: { sucursalId: sucursal_id },
       orderBy: { fechaHora: "asc" },
       include: {
-        usuario: { select: { nombre: true, email: true } },
-        servicio: { select: { nombre: true, duracionMinutos: true } },
+        usuario: {
+          select: { nombre: true, email: true },
+        },
+        // Relación 1:N actualizada
+        servicios: {
+          include: {
+            servicio: {
+              select: { nombre: true, duracionMinutos: true },
+            },
+          },
+        },
       },
     });
 
-    // Mapeo a un DTO plano para facilitar el consumo en el frontend
-    return citas.map((cita) => ({
-      id: cita.id,
-      fechaHora: cita.fechaHora,
-      estado: cita.estado,
-      // Manejo seguro de nulos (Nullish Coalescing)
-      cliente: cita.usuario?.nombre ?? "Cliente Anónimo",
-      servicio: cita.servicio?.nombre ?? "Servicio Eliminado",
-      total: Number(cita.total),
-    }));
+    // BLOQUE 2: Transformación de Datos (DTO)
+    return citas_db.map((cita) => {
+      // Lógica de presentación: Unir nombres de servicios (ej: "Manicure, Pedicure")
+      const lista_servicios = cita.servicios
+        .map((item) => item.servicio.nombre)
+        .join(", ");
+
+      return {
+        id: cita.id,
+        fechaHora: cita.fechaHora,
+        estado: cita.estado,
+        cliente: cita.usuario?.nombre ?? "Cliente Anónimo",
+        // Si no hay servicios, mostramos un texto por defecto
+        servicio: lista_servicios || "Sin servicios asignados",
+        total: Number(cita.total),
+      };
+    });
   }
 
   /**
-   * Agenda una nueva cita en estado 'pendiente'.
-   * Valida la existencia del servicio base antes de crear.
+   * Crea una nueva cita con múltiples servicios.
    *
-   * @param data - Datos validados del formulario.
-   * @param sucursal_id - ID de la sucursal activa.
+   * CAMBIO SPRINT 1:
+   * - Recibe un array de IDs (`servicios_ids`).
+   * - Calcula el total sumando los precios individuales.
+   * - Crea los registros en la tabla intermedia `CitaServicio` en una sola transacción.
+   *
+   * @param data - DTO con usuario, lista de servicios y fecha.
+   * @param sucursal_id - ID de la sucursal donde se agendará.
    */
   async agendar(
-    data: { usuario_id: string; servicio_id: string; fecha_hora: string },
+    data: { usuario_id: string; servicios_ids: string[]; fecha_hora: string },
     sucursal_id: string
   ) {
-    // 1. Validar que el servicio exista y obtener su precio base
-    const servicio = await this.prisma.servicio.findUnique({
-      where: { id: data.servicio_id },
+    // BLOQUE 1: Validación de Catálogo
+    // Buscamos todos los servicios solicitados para asegurar que existen
+    // y para obtener sus precios actuales.
+    const servicios_encontrados = await this.prisma.servicio.findMany({
+      where: {
+        id: { in: data.servicios_ids },
+        activo: true, // Solo permitimos agendar servicios activos
+      },
     });
 
-    if (!servicio) {
+    // Validación: ¿Encontramos todos los servicios que pidió el usuario?
+    if (servicios_encontrados.length !== data.servicios_ids.length) {
       throw new BadRequestException(
-        "El servicio solicitado no existe en el catálogo global."
+        "Uno o más servicios solicitados no existen o están inactivos."
       );
     }
 
-    // Nota Senior: Aquí podríamos agregar una validación de "disponibilidad" (overlap)
-    // en una futura iteración (Roadmap P1).
+    // BLOQUE 2: Cálculo Financiero
+    // Sumamos el precio base de todos los servicios encontrados.
+    const total_calculado = servicios_encontrados.reduce(
+      (suma, servicio) => suma + Number(servicio.precioBase),
+      0
+    );
 
+    // BLOQUE 3: Persistencia (Escritura)
+    // Usamos 'nested writes' de Prisma para crear la Cita y sus relaciones CitaServicio
+    // atómicamente.
     return this.prisma.cita.create({
       data: {
         sucursalId: sucursal_id,
         usuarioId: data.usuario_id,
-        servicioId: data.servicio_id,
         fechaHora: new Date(data.fecha_hora),
         estado: CitaEstado.pendiente,
-        total: servicio.precioBase, // Precio base inicial
+        total: total_calculado,
+        // Magia de Prisma: Creamos las filas intermedias aquí mismo
+        servicios: {
+          create: servicios_encontrados.map((servicio) => ({
+            servicioId: servicio.id,
+            precio: servicio.precioBase, // Snapshot del precio al momento de venta
+          })),
+        },
       },
     });
   }
 
   /**
-   * Cierra una cita ejecutando todas las reglas de negocio de forma atómica.
-   * * Flujo Transaccional (ACID):
-   * 1. Validación de seguridad (Sucursal y Estado).
-   * 2. Descuento de stock en tiempo real con validación de saldos negativos.
-   * 3. Generación de puntos de lealtad (5% del total).
-   * 4. Cálculo de comisiones para el empleado.
-   * 5. Auditoría del evento (Compliance).
-   * * @param cita_id - UUID de la cita a cerrar.
-   * @param sucursal_id - UUID de la sucursal contexto.
+   * Cierra una cita (Proceso de Venta).
+   *
+   * LÓGICA COMPLEJA (Sprint 1 Update):
+   * 1. Itera sobre CADA servicio de la cita.
+   * 2. Por cada servicio, busca su receta de materiales.
+   * 3. Descuenta del inventario local la cantidad necesaria.
+   * 4. Si falta material para CUALQUIER servicio, revierte todo (Atomicidad).
+   *
+   * @param cita_id - UUID de la cita.
+   * @param sucursal_id - UUID de la sucursal (Contexto de seguridad).
    */
   async cerrar(cita_id: string, sucursal_id: string) {
-    // Iniciamos una transacción: Todo tiene que salir bien o nada se guarda.
+    // Iniciamos transacción interactiva para asegurar ACID
     return this.prisma.$transaction(async (tx) => {
-      // 1. Obtener la cita con bloqueo y relaciones
-      const cita_encontrada = await tx.cita.findUnique({
+      // BLOQUE 1: Obtención de Datos Profunda
+      // Necesitamos la Cita -> Servicios -> Definición Servicio -> Receta Materiales
+      const cita_completa = await tx.cita.findUnique({
         where: { id: cita_id },
         include: {
-          servicio: {
+          servicios: {
             include: {
-              serviciosMateriales: true, // Receta para descontar inventario
+              servicio: {
+                include: {
+                  serviciosMateriales: true, // Receta (BOM)
+                },
+              },
             },
           },
           empleado: true,
@@ -108,30 +162,32 @@ export class AppointmentsService {
         },
       });
 
-      // --- VALIDACIONES DEFENSIVAS ---
-      if (!cita_encontrada) {
-        throw new NotFoundException("Cita no encontrada.");
+      // BLOQUE 2: Validaciones de Negocio (Guard Clauses)
+      if (!cita_completa) {
+        throw new NotFoundException("La cita no existe.");
       }
-
-      // Regla de Seguridad Multi-sucursal [AGENTS.md]
-      if (cita_encontrada.sucursalId !== sucursal_id) {
+      // Seguridad Multi-tenancy
+      if (cita_completa.sucursalId !== sucursal_id) {
         throw new BadRequestException(
-          "Violación de acceso: La cita no pertenece a la sucursal activa."
+          "Error de seguridad: La cita no pertenece a la sucursal activa."
         );
       }
-
-      // Regla de Idempotencia
-      if (cita_encontrada.estado === CitaEstado.cerrada) {
-        throw new ConflictException("Esta cita ya fue cerrada previamente.");
+      // Idempotencia
+      if (cita_completa.estado === CitaEstado.cerrada) {
+        throw new ConflictException("La cita ya fue cerrada previamente.");
       }
 
-      const total_pagado = Number(cita_encontrada.total);
+      const monto_total = Number(cita_completa.total);
 
-      // --- 2. INVENTARIO (Gestión de Stock) ---
-      if (cita_encontrada.servicio?.serviciosMateriales) {
-        for (const insumo of cita_encontrada.servicio.serviciosMateriales) {
-          // Buscar existencia EN ESTA SUCURSAL (Scope local)
-          const existencia = await tx.existencia.findUnique({
+      // BLOQUE 3: Procesamiento de Inventario (Multi-Servicio)
+      // Iteramos sobre cada servicio contratado en la cita
+      for (const item_venta of cita_completa.servicios) {
+        const receta = item_venta.servicio.serviciosMateriales;
+
+        // Por cada material que requiere este servicio...
+        for (const insumo of receta) {
+          // Buscamos si existe stock en ESTA sucursal
+          const existencia_actual = await tx.existencia.findUnique({
             where: {
               sucursalId_materialId: {
                 sucursalId: sucursal_id,
@@ -140,21 +196,21 @@ export class AppointmentsService {
             },
           });
 
-          if (!existencia) {
-            // Regla: No permitir cierre si no está configurado el inventario local
+          // Validación estricta de configuración
+          if (!existencia_actual) {
             throw new ConflictException(
-              `Error de configuración: El material ${insumo.materialId} no tiene registro en esta sucursal.`
+              `Error de configuración: El material '${insumo.materialId}' (requerido por ${item_venta.servicio.nombre}) no está dado de alta en el inventario de esta sucursal.`
             );
           }
 
-          // Regla: Bloquear stock negativo (Inventory Rules Opción A)
-          if (Number(existencia.stockActual) < Number(insumo.cantidad)) {
+          // Validación de Stock Suficiente
+          if (Number(existencia_actual.stockActual) < Number(insumo.cantidad)) {
             throw new ConflictException(
-              `Stock insuficiente para '${insumo.materialId}'. Requerido: ${insumo.cantidad}, Actual: ${existencia.stockActual}`
+              `Stock insuficiente: No hay suficiente '${insumo.materialId}' para realizar el servicio '${item_venta.servicio.nombre}'. Requerido: ${insumo.cantidad}, Disponible: ${existencia_actual.stockActual}`
             );
           }
 
-          // Ejecutar descuento
+          // Ejecución del Descuento
           await tx.existencia.update({
             where: {
               sucursalId_materialId: {
@@ -162,65 +218,65 @@ export class AppointmentsService {
                 materialId: insumo.materialId,
               },
             },
-            data: { stockActual: { decrement: insumo.cantidad } },
-          });
-        }
-      }
-
-      // --- 3. PUNTOS (Lealtad) ---
-      // Regla: 5% del total como puntos (floor para enteros)
-      const puntos_ganados = Math.floor(total_pagado * 0.05);
-
-      if (cita_encontrada.usuarioId && puntos_ganados > 0) {
-        await tx.puntosMovimiento.create({
-          data: {
-            usuarioId: cita_encontrada.usuarioId,
-            sucursalId: sucursal_id,
-            citaId: cita_encontrada.id,
-            tipo: MovimientoTipo.earn,
-            cantidad: puntos_ganados,
-            fecha: new Date(),
-          },
-        });
-      }
-
-      // --- 4. COMISIONES (Nómina) ---
-      if (cita_encontrada.empleado) {
-        const porcentaje = Number(cita_encontrada.empleado.porcentajeComision);
-        const monto_comision = total_pagado * (porcentaje / 100);
-
-        if (monto_comision > 0) {
-          await tx.comision.create({
             data: {
-              empleadoId: cita_encontrada.empleado.id,
-              citaId: cita_encontrada.id,
-              porcentaje: porcentaje,
-              monto: monto_comision,
-              generadoEn: new Date(),
+              stockActual: { decrement: insumo.cantidad },
             },
           });
         }
       }
 
-      // --- 5. CIERRE FINAL ---
+      // BLOQUE 4: Fidelización (Puntos)
+      // Regla: 5% del monto total se abona como puntos
+      const puntos_a_otorgar = Math.floor(monto_total * 0.05);
+
+      if (cita_completa.usuarioId && puntos_a_otorgar > 0) {
+        await tx.puntosMovimiento.create({
+          data: {
+            usuarioId: cita_completa.usuarioId,
+            sucursalId: sucursal_id,
+            citaId: cita_completa.id,
+            tipo: MovimientoTipo.earn,
+            cantidad: puntos_a_otorgar,
+            fecha: new Date(),
+          },
+        });
+      }
+
+      // BLOQUE 5: Nómina (Comisiones)
+      if (cita_completa.empleado) {
+        const pct_comision = Number(cita_completa.empleado.porcentajeComision);
+        const monto_comision = monto_total * (pct_comision / 100);
+
+        if (monto_comision > 0) {
+          await tx.comision.create({
+            data: {
+              empleadoId: cita_completa.empleado.id,
+              citaId: cita_completa.id,
+              porcentaje: pct_comision,
+              monto: monto_comision,
+            },
+          });
+        }
+      }
+
+      // BLOQUE 6: Cierre y Auditoría
+      // Actualizamos el estado de la cita
       const cita_actualizada = await tx.cita.update({
         where: { id: cita_id },
         data: { estado: CitaEstado.cerrada },
       });
 
-      // --- 6. AUDITORÍA (Logs) ---
-      // Registro en tabla 'audit_log' para trazabilidad completa
+      // Generamos rastro de auditoría (Observabilidad)
       await tx.auditLog.create({
         data: {
           entidad: "Cita",
           accion: "Cierre",
           sucursalId: sucursal_id,
-          usuarioId: cita_encontrada.usuarioId, // Cliente afectado
-          descripcion: `Cita ${cita_id} cerrada. Total: $${total_pagado}`,
+          usuarioId: cita_completa.usuarioId,
+          descripcion: `Cierre de venta multi-servicio. Total: $${monto_total}`,
           metadata: {
-            puntos_generados: puntos_ganados,
-            items_inventario:
-              cita_encontrada.servicio?.serviciosMateriales.length ?? 0,
+            servicios_procesados: cita_completa.servicios.length,
+            puntos_generados: puntos_a_otorgar,
           },
         },
       });
@@ -228,7 +284,7 @@ export class AppointmentsService {
       return {
         ...cita_actualizada,
         mensaje:
-          "Cita cerrada correctamente. Inventario, puntos y comisiones procesados.",
+          "Venta procesada correctamente. Inventario actualizado y puntos asignados.",
       };
     });
   }

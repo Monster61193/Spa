@@ -2,7 +2,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { AppointmentsController } from "./appointments.controller";
 import { AppointmentsService } from "./appointments.service";
 
-// Mock del servicio de citas
+// Mock del servicio (Simulacro)
 const mock_appointments_service = {
   listar: jest.fn(),
   agendar: jest.fn(),
@@ -10,8 +10,9 @@ const mock_appointments_service = {
 };
 
 /**
- * Suite de pruebas para AppointmentsController.
- * Se enfoca en validar que el esquema Zod acepte los formatos de datos esperados.
+ * Suite de Pruebas: AppointmentsController.
+ * Verifica que la capa HTTP valide y transforme correctamente los datos
+ * antes de llamar al servicio.
  */
 describe("AppointmentsController", () => {
   let controller: AppointmentsController;
@@ -29,37 +30,42 @@ describe("AppointmentsController", () => {
     service = module.get(AppointmentsService);
   });
 
-  describe("crear (Validación Zod)", () => {
-    it("debe aceptar IDs no-UUID (como serv-1) correctamente", async () => {
-      // 1. Payload con IDs cortos (Seeds)
+  describe("crear (Validación Zod Multi-servicio)", () => {
+    /**
+     * Caso de Éxito: Payload válido con array de servicios.
+     */
+    it("debe aceptar un payload con array de servicios_ids", async () => {
+      // ARRANGE: Datos válidos según el nuevo esquema
       const payload_valido = {
-        usuario_id: "user-admin-id", // ID corto
-        servicio_id: "serv-1", // ID corto
+        usuario_id: "user-1",
+        servicios_ids: ["serv-1", "serv-2"], // Array con múltiples servicios
         fecha_hora: "2025-10-25T10:00:00Z",
       };
 
       const request_mock = { branchId: "branch-principal" } as any;
 
-      // 2. Ejecución
+      // ACT: Llamada al controlador
       await controller.crear(payload_valido, request_mock);
 
-      // 3. Verificación
-      // Si llega aquí sin lanzar error, la validación relajada funcionó.
+      // ASSERT: Verificar que el servicio recibió los datos correctos
       expect(service.agendar).toHaveBeenCalledWith(
         payload_valido,
         "branch-principal"
       );
     });
 
-    it("debe rechazar fechas inválidas", async () => {
+    /**
+     * Caso de Error: Array vacío.
+     */
+    it("debe rechazar si servicios_ids está vacío", async () => {
       const payload_invalido = {
         usuario_id: "user-1",
-        servicio_id: "serv-1",
-        fecha_hora: "esto-no-es-una-fecha",
+        servicios_ids: [], // Error: min(1)
+        fecha_hora: "2025-10-25T10:00:00Z",
       };
       const request_mock = { branchId: "branch-principal" } as any;
 
-      // Esperamos que Zod lance un error al parsear la fecha
+      // ASSERT: Zod debe lanzar excepción
       await expect(
         controller.crear(payload_invalido, request_mock)
       ).rejects.toThrow();

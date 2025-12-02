@@ -3,45 +3,49 @@ import type { Request } from "express";
 import { AppointmentsService } from "./appointments.service";
 import { z } from "zod";
 
-// Esquema de validación para crear cita (snake_case en propiedades)
-// ANTES (Causa el error con datos de prueba):
-/*
+/**
+ * Esquema de Validación (DTO) para agendar citas.
+ * -----------------------------------------------------------------------------
+ * CAMBIO SPRINT 1:
+ * - Reemplazamos `servicio_id` (string) por `servicios_ids` (array de strings).
+ * - Validamos que el array no esté vacío (.min(1)).
+ */
 const AgendarSchema = z.object({
-  usuario_id: z.string().uuid(),
-  servicio_id: z.string().uuid(),
-  fecha_hora: z.string().datetime()
-})
-*/
-
-// AHORA (Correcto para soportar seeds):
-const AgendarSchema = z.object({
-  usuario_id: z.string().min(1), // Acepta 'user-admin-id'
-  servicio_id: z.string().min(1), // Acepta 'serv-1'
-  fecha_hora: z.string().datetime(),
+  usuario_id: z.string().min(1, "El ID del usuario es obligatorio"),
+  // Validación de Array: Debe ser una lista de strings y tener al menos uno.
+  servicios_ids: z
+    .array(z.string().min(1))
+    .min(1, "Debes seleccionar al menos un servicio"),
+  fecha_hora: z.string().datetime("Formato de fecha inválido (ISO 8601)"),
 });
 
 /**
- * Controlador para agenda de citas y cierres.
- * Protegido globalmente por AuthGuard y BranchGuard.
+ * Controlador de Citas (API Gateway).
+ * Expone los endpoints REST protegidos para la gestión de la agenda.
  */
 @Controller("appointments")
 export class AppointmentsController {
   constructor(private readonly appointments_service: AppointmentsService) {}
 
   /**
+   * GET /appointments
    * Lista las citas de la sucursal activa.
-   * * @param request - Request express con el usuario y branch inyectados.
+   *
+   * @param request - Petición con usuario y branch inyectados por los Guards.
    */
   @Get()
   async listar(@Req() request: Request & { branchId?: string }) {
-    // Si por alguna razón no llega el header (login), usamos fallback a principal
     const branch_id = request.branchId ?? "branch-principal";
     const items = await this.appointments_service.listar(branch_id);
     return { items };
   }
 
   /**
-   * Agenda una nueva cita en la sucursal activa.
+   * POST /appointments
+   * Agenda una nueva cita con soporte para múltiples servicios.
+   *
+   * @param payload - JSON con { usuario_id, servicios_ids, fecha_hora }.
+   * @param request - Contexto de la sucursal activa.
    */
   @Post()
   async crear(
@@ -50,15 +54,17 @@ export class AppointmentsController {
   ) {
     const branch_id = request.branchId ?? "branch-principal";
 
-    // Validamos que el payload tenga la forma correcta con Zod
+    // 1. Validación de Estructura (Zod)
+    // Si el payload no cumple (ej. array vacío), lanza BadRequestException automáticamente.
     const datos_validos = AgendarSchema.parse(payload);
 
-    // Delegamos al servicio
+    // 2. Delegación a Lógica de Negocio
     return this.appointments_service.agendar(datos_validos, branch_id);
   }
 
   /**
-   * Cierra una cita con inventario/puntos/comisiones.
+   * POST /appointments/close
+   * Cierra una cita, procesando inventario, puntos y comisiones.
    */
   @Post("close")
   async cerrar(

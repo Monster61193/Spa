@@ -114,10 +114,16 @@ model Servicio {
   precioBase          Decimal             @default(0) @map("precio_base")
   duracionMinutos     Int                 @map("duracion_minutos")
   activo              Boolean             @default(true)
+  
+  // Relaciones existentes
   serviciosSucursal   ServicioSucursal[]
   serviciosMateriales ServicioMaterial[]
-  citas               Cita[]
   promocionesServicios PromocionServicio[]
+
+  // --- CAMBIO SPRINT 1 ---
+  // ANTES: citas Cita[] (Relación directa 1 a muchos)
+  // AHORA: Relación a través de la tabla intermedia para permitir N servicios por cita
+  citas               CitaServicio[]      
 
   @@map("servicios")
 }
@@ -199,30 +205,71 @@ model PromocionServicio {
 
 model Cita {
   id                   String              @id @default(uuid())
+  
+  // Relaciones básicas
   usuarioId            String?
   empleadoId           String?
   sucursalId           String
-  servicioId           String?
+  
+  // --- CAMBIO SPRINT 1 ---
+  // ELIMINAMOS la referencia directa a un solo servicio
+  // servicioId        String?   <-- BORRAR ESTA LÍNEA
+  // servicio          Servicio? <-- BORRAR ESTA LÍNEA
+
   fechaHora            DateTime            @map("fecha_hora")
-  estado               CitaEstado          @default(pendiente)
+  // Usamos el enum que ya definiste (asegúrate de que coincida con tu BD)
+  estado               CitaEstado          @default(pendiente) 
+  
   total                Decimal             @default(0)
   anticipo             Decimal             @default(0)
   notas                String?
   createdAt            DateTime            @default(now()) @map("created_at")
+  
+  // Relaciones (Foreign Keys)
   usuario              Usuario?            @relation(fields: [usuarioId], references: [id])
   empleado             Empleado?           @relation(fields: [empleadoId], references: [id])
   sucursal             Sucursal            @relation(fields: [sucursalId], references: [id])
-  servicio             Servicio?           @relation(fields: [servicioId], references: [id])
+  
+  // NUEVO: Relación 1:N con la tabla intermedia de servicios
+  servicios            CitaServicio[]
+
+  // Relaciones financieras y de lealtad
   puntosMovimientos    PuntosMovimiento[]
   comisiones           Comision[]
   promocionesAplicadas PromocionAplicada[]
 
+  // Índices para optimizar búsquedas
   @@index([usuarioId])
   @@index([empleadoId])
   @@index([sucursalId])
-  @@index([servicioId])
+  // @@index([servicioId]) <-- BORRAR ESTE ÍNDICE TAMBIÉN
   @@index([fechaHora])
+  
   @@map("citas")
+}
+
+
+ // NUEVO MODELO SPRINT 1: Tabla Intermedia Citas - Servicios
+ // Permite que una cita tenga múltiples servicios y congela el precio al momento
+ // de la venta (snapshot), protegiendo el historial si los precios base cambian.
+ //
+model CitaServicio {
+  citaId     String   @map("cita_id")
+  servicioId String   @map("servicio_id")
+  
+  // Snapshot del precio unitario al momento de agendar
+  precio     Decimal  @default(0) 
+
+  // Relaciones
+  cita       Cita     @relation(fields: [citaId], references: [id], onDelete: Cascade)
+  servicio   Servicio @relation(fields: [servicioId], references: [id])
+
+  // Llave primaria compuesta (Una combinación única de Cita + Servicio)
+  // Nota: Si permitimos repetir el mismo servicio en una cita, necesitaríamos un ID propio.
+  // Por ahora asumimos que no se repite el mismo servicio ID en la misma cita.
+  @@id([citaId, servicioId]) 
+  
+  @@map("citas_servicios")
 }
 
 model PromocionAplicada {
