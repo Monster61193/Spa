@@ -1,8 +1,11 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App from './App';
+import { api_client } from './api/api_client';
 
-// 1. MOCK AUTH: Simulamos usuario logueado
+// --- MOCKS ---
+
+// 1. Auth & Branch Contexts
 vi.mock('./contexts/auth.context', () => ({
   useAuth: () => ({
     is_authenticated: true,
@@ -11,53 +14,92 @@ vi.mock('./contexts/auth.context', () => ({
   }),
 }));
 
-// 2. MOCK BRANCH: ¡Corregido! Agregamos 'branches: []' para que no falle el map
 vi.mock('./contexts/branch.context', () => ({
   useBranch: () => ({
-    activeBranch: { nombre: 'Principal' },
-    branches: [], // <--- ESTO FALTABA
+    activeBranch: { id: 'suc-1', nombre: 'Principal' },
+    branches: [{ id: 'suc-1', nombre: 'Principal' }],
     isLoading: false,
+    setActiveBranch: vi.fn(),
   }),
 }));
 
-// 3. MOCK APPOINTMENTS: Datos vacíos
-vi.mock('./hooks/use_appointments', () => ({
-  useAppointments: () => ({ data: [], isLoading: false }),
+// 2. API Client (Para espiar las llamadas POST)
+vi.mock('./api/api_client', () => ({
+  api_client: {
+    post: vi.fn(),
+    get: vi.fn(), // Por si acaso
+    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+  },
 }));
 
-// 4. MOCK COMPONENTES HIJOS COMPLEJOS
-// Esto es clave: "Apagamos" los componentes que no estamos probando para aislar App.
+// 3. Datos de Citas (Simulamos una cita pendiente)
+vi.mock('./hooks/use_appointments', () => ({
+  useAppointments: () => ({
+    data: [
+      {
+        id: 'cita-pendiente-1',
+        fechaHora: '2025-10-25T10:00:00Z',
+        servicio: 'Masaje',
+        cliente: 'Juan',
+        estado: 'pendiente',
+      },
+    ],
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
+}));
 
-// Evitamos que se renderice el formulario real (ya tiene sus propios tests)
+// 4. Componentes Hijos (Para aislar App)
 vi.mock('./components/forms/appointment_form', () => ({
   AppointmentForm: () => <div data-testid="appointment-form">Formulario Mock</div>,
 }));
-
-// Evitamos el error de ThemeProvider mockeando el Header entero
+vi.mock('./components/forms/inventory_form', () => ({
+  InventoryForm: () => <div>Inventario Mock</div>,
+}));
 vi.mock('./components/layout/header', () => ({
-  Header: () => <div data-testid="mock-header">Header Admin</div>,
+  Header: () => <div>Header Mock</div>,
 }));
 
-// Evitamos problemas internos del selector de sucursales (opcional, pero seguro)
-vi.mock('./components/branch_selector/branch_selector', () => ({
-  BranchSelector: () => <div>Selector Sucursal</div>,
-}));
+describe('App Component - Flujos Críticos', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-describe('App Component', () => {
-  it('abre el modal al hacer clic en Nueva Cita', async () => {
+  it('Muestra modal de nueva cita al hacer clic en el botón', async () => {
     render(<App />);
-
-    // 1. Verificar que el modal NO está visible al inicio (buscamos el contenido mockeado)
-    expect(screen.queryByTestId('appointment-form')).not.toBeInTheDocument();
-
-    // 2. Hacer clic en el botón "+ Nueva Cita"
-    // Nota: Buscamos por el texto exacto que pusimos en el botón
-    const boton = screen.getByText('+ Nueva Cita');
-    fireEvent.click(boton);
-
-    // 3. Verificar que el modal (y su contenido) ahora SÍ está visible
+    fireEvent.click(screen.getByText('+ Nueva Cita'));
     await waitFor(() => {
       expect(screen.getByTestId('appointment-form')).toBeInTheDocument();
     });
+  });
+
+  it('Ejecuta el flujo completo de cierre de cita (Confirmación -> Éxito)', async () => {
+    // Configurar el mock para que la API responda éxito
+    (api_client.post as any).mockResolvedValueOnce({ data: { mensaje: 'Cierre exitoso' } });
+
+    render(<App />);
+
+    // 1. Buscar el botón de cerrar en la tabla (para la cita pendiente)
+    const btnCerrar = screen.getByText('Cerrar / Cobrar');
+    expect(btnCerrar).toBeInTheDocument();
+
+    // 2. Clic en Cerrar -> Debe abrir Modal de Confirmación
+    fireEvent.click(btnCerrar);
+
+    // Buscamos texto clave del modal de confirmación
+    expect(await screen.findByText('¿Estás seguro de cerrar esta cita?')).toBeInTheDocument();
+    expect(screen.getByText('Sí, Confirmar')).toBeInTheDocument();
+
+    // 3. Clic en Confirmar -> Debe llamar a la API
+    fireEvent.click(screen.getByText('Sí, Confirmar'));
+
+    await waitFor(() => {
+      // Verificar que se llamó al endpoint correcto con el ID correcto
+      expect(api_client.post).toHaveBeenCalledWith('/appointments/close', { citaId: 'cita-pendiente-1' });
+    });
+
+    // 4. Verificar que aparece el Modal de Feedback (Éxito)
+    // El título que definimos en App.tsx para éxito
+    expect(await screen.findByText('🎉 ¡Cita Cerrada!')).toBeInTheDocument();
   });
 });
