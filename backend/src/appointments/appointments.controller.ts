@@ -1,22 +1,27 @@
-import { Body, Controller, Get, Post, Req } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Req } from "@nestjs/common";
 import type { Request } from "express";
 import { AppointmentsService } from "./appointments.service";
 import { z } from "zod";
 
 /**
  * Esquema de Validación (DTO) para agendar citas.
- * -----------------------------------------------------------------------------
- * CAMBIO SPRINT 1:
- * - Reemplazamos `servicio_id` (string) por `servicios_ids` (array de strings).
- * - Validamos que el array no esté vacío (.min(1)).
  */
 const AgendarSchema = z.object({
   usuario_id: z.string().min(1, "El ID del usuario es obligatorio"),
-  // Validación de Array: Debe ser una lista de strings y tener al menos uno.
   servicios_ids: z
     .array(z.string().min(1))
     .min(1, "Debes seleccionar al menos un servicio"),
   fecha_hora: z.string().datetime("Formato de fecha inválido (ISO 8601)"),
+});
+
+/**
+ * Esquema para EDICIÓN de servicios (Sprint 2).
+ * Solo validamos la nueva lista de servicios, el resto de datos se mantiene.
+ */
+const EditarItemsSchema = z.object({
+  servicios_ids: z
+    .array(z.string().min(1))
+    .min(1, "La cita debe tener al menos un servicio asignado."),
 });
 
 /**
@@ -30,8 +35,6 @@ export class AppointmentsController {
   /**
    * GET /appointments
    * Lista las citas de la sucursal activa.
-   *
-   * @param request - Petición con usuario y branch inyectados por los Guards.
    */
   @Get()
   async listar(@Req() request: Request & { branchId?: string }) {
@@ -42,10 +45,7 @@ export class AppointmentsController {
 
   /**
    * POST /appointments
-   * Agenda una nueva cita con soporte para múltiples servicios.
-   *
-   * @param payload - JSON con { usuario_id, servicios_ids, fecha_hora }.
-   * @param request - Contexto de la sucursal activa.
+   * Agenda una nueva cita.
    */
   @Post()
   async crear(
@@ -53,13 +53,33 @@ export class AppointmentsController {
     @Req() request: Request & { branchId?: string }
   ) {
     const branch_id = request.branchId ?? "branch-principal";
-
-    // 1. Validación de Estructura (Zod)
-    // Si el payload no cumple (ej. array vacío), lanza BadRequestException automáticamente.
     const datos_validos = AgendarSchema.parse(payload);
-
-    // 2. Delegación a Lógica de Negocio
     return this.appointments_service.agendar(datos_validos, branch_id);
+  }
+
+  /**
+   * PATCH /appointments/:id/items (NUEVO SPRINT 2)
+   * Permite editar los servicios de una cita existente.
+   *
+   * @param id - ID de la cita a editar.
+   * @param payload - JSON con { servicios_ids: [...] }.
+   */
+  @Patch(":id/items")
+  async actualizar_items(
+    @Param("id") id: string,
+    @Body() payload: unknown,
+    @Req() request: Request & { branchId?: string }
+  ) {
+    const branch_id = request.branchId ?? "branch-principal";
+
+    // Validamos que el payload sea un array de strings válido
+    const datos_validos = EditarItemsSchema.parse(payload);
+
+    return this.appointments_service.actualizar_items(
+      id,
+      datos_validos.servicios_ids,
+      branch_id
+    );
   }
 
   /**

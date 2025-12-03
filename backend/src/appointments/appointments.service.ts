@@ -9,49 +9,30 @@ import { CitaEstado, MovimientoTipo } from "@prisma/client";
 
 /**
  * Servicio de Dominio: Gestión de Citas (Appointments).
- * -----------------------------------------------------------------------------
- * Centraliza la lógica transaccional para el ciclo de vida de la cita:
- * Agendar -> Validar -> Cerrar (Venta).
- *
- * Actualizado para SPRINT 1: Soporte de Múltiples Servicios por Cita.
+ * Centraliza la lógica transaccional para el ciclo de vida de la cita.
  */
 @Injectable()
 export class AppointmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Lista las citas de una sucursal, formateando la respuesta para el Frontend.
-   *
-   * CAMBIO SPRINT 1:
-   * Ahora concatena los nombres de los múltiples servicios en un solo string
-   * para mantener la compatibilidad visual con la tabla actual.
-   *
-   * @param sucursal_id - ID de la sucursal activa (header X-Branch-Id).
-   * @returns Lista de citas con detalles planos.
+   * Lista las citas de una sucursal.
    */
   async listar(sucursal_id: string) {
-    // BLOQUE 1: Consulta Optimizada
     const citas_db = await this.prisma.cita.findMany({
       where: { sucursalId: sucursal_id },
       orderBy: { fechaHora: "asc" },
       include: {
-        usuario: {
-          select: { nombre: true, email: true },
-        },
-        // Relación 1:N actualizada
+        usuario: { select: { nombre: true, email: true } },
         servicios: {
           include: {
-            servicio: {
-              select: { nombre: true, duracionMinutos: true },
-            },
+            servicio: { select: { nombre: true, duracionMinutos: true } },
           },
         },
       },
     });
 
-    // BLOQUE 2: Transformación de Datos (DTO)
     return citas_db.map((cita) => {
-      // Lógica de presentación: Unir nombres de servicios (ej: "Manicure, Pedicure")
       const lista_servicios = cita.servicios
         .map((item) => item.servicio.nombre)
         .join(", ");
@@ -61,7 +42,6 @@ export class AppointmentsService {
         fechaHora: cita.fechaHora,
         estado: cita.estado,
         cliente: cita.usuario?.nombre ?? "Cliente Anónimo",
-        // Si no hay servicios, mostramos un texto por defecto
         servicio: lista_servicios || "Sin servicios asignados",
         total: Number(cita.total),
       };
@@ -69,47 +49,27 @@ export class AppointmentsService {
   }
 
   /**
-   * Crea una nueva cita con múltiples servicios.
-   *
-   * CAMBIO SPRINT 1:
-   * - Recibe un array de IDs (`servicios_ids`).
-   * - Calcula el total sumando los precios individuales.
-   * - Crea los registros en la tabla intermedia `CitaServicio` en una sola transacción.
-   *
-   * @param data - DTO con usuario, lista de servicios y fecha.
-   * @param sucursal_id - ID de la sucursal donde se agendará.
+   * Crea una nueva cita.
    */
   async agendar(
     data: { usuario_id: string; servicios_ids: string[]; fecha_hora: string },
     sucursal_id: string
   ) {
-    // BLOQUE 1: Validación de Catálogo
-    // Buscamos todos los servicios solicitados para asegurar que existen
-    // y para obtener sus precios actuales.
     const servicios_encontrados = await this.prisma.servicio.findMany({
-      where: {
-        id: { in: data.servicios_ids },
-        activo: true, // Solo permitimos agendar servicios activos
-      },
+      where: { id: { in: data.servicios_ids }, activo: true },
     });
 
-    // Validación: ¿Encontramos todos los servicios que pidió el usuario?
     if (servicios_encontrados.length !== data.servicios_ids.length) {
       throw new BadRequestException(
         "Uno o más servicios solicitados no existen o están inactivos."
       );
     }
 
-    // BLOQUE 2: Cálculo Financiero
-    // Sumamos el precio base de todos los servicios encontrados.
     const total_calculado = servicios_encontrados.reduce(
       (suma, servicio) => suma + Number(servicio.precioBase),
       0
     );
 
-    // BLOQUE 3: Persistencia (Escritura)
-    // Usamos 'nested writes' de Prisma para crear la Cita y sus relaciones CitaServicio
-    // atómicamente.
     return this.prisma.cita.create({
       data: {
         sucursalId: sucursal_id,
@@ -117,11 +77,10 @@ export class AppointmentsService {
         fechaHora: new Date(data.fecha_hora),
         estado: CitaEstado.pendiente,
         total: total_calculado,
-        // Magia de Prisma: Creamos las filas intermedias aquí mismo
         servicios: {
           create: servicios_encontrados.map((servicio) => ({
             servicioId: servicio.id,
-            precio: servicio.precioBase, // Snapshot del precio al momento de venta
+            precio: servicio.precioBase,
           })),
         },
       },
@@ -129,32 +88,99 @@ export class AppointmentsService {
   }
 
   /**
+   * Actualiza los servicios de una cita existente (SPRINT 2).
+   * * Lógica Transaccional:
+   * 1. Valida que la cita exista, pertenezca a la sucursal y sea PENDIENTE.
+   * 2. Elimina todos los servicios actuales de la cita (Limpieza).
+   * 3. Inserta los nuevos servicios.
+   * 4. Recalcula y actualiza el total de la cita.
+   * * @param cita_id - ID de la cita a modificar.
+   * @param nuevos_servicios_ids - Array con los IDs de los nuevos servicios.
+   * @param sucursal_id - ID de la sucursal (Seguridad).
+   */
+  async actualizar_items(
+    cita_id: string,
+    nuevos_servicios_ids: string[],
+    sucursal_id: string
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Validación Inicial
+      const cita_actual = await tx.cita.findUnique({
+        where: { id: cita_id },
+      });
+
+      if (!cita_actual) throw new NotFoundException("Cita no encontrada");
+
+      if (cita_actual.sucursalId !== sucursal_id) {
+        throw new BadRequestException(
+          "La cita no pertenece a la sucursal activa"
+        );
+      }
+
+      if (cita_actual.estado !== CitaEstado.pendiente) {
+        throw new ConflictException(
+          "Solo se pueden editar citas en estado 'pendiente'. Esta cita ya fue procesada."
+        );
+      }
+
+      // 2. Validación de Catálogo (Nuevos Servicios)
+      const servicios_nuevos = await tx.servicio.findMany({
+        where: { id: { in: nuevos_servicios_ids }, activo: true },
+      });
+
+      if (servicios_nuevos.length !== nuevos_servicios_ids.length) {
+        throw new BadRequestException(
+          "Uno o más servicios nuevos no son válidos"
+        );
+      }
+
+      // 3. Borrado de Relaciones Anteriores (Reset)
+      await tx.citaServicio.deleteMany({
+        where: { citaId: cita_id },
+      });
+
+      // 4. Cálculo de Nuevo Total
+      const nuevo_total = servicios_nuevos.reduce(
+        (acc, srv) => acc + Number(srv.precioBase),
+        0
+      );
+
+      // 5. Inserción de Nuevas Relaciones y Actualización de Cabecera
+      // Nota: Usamos createMany si el driver lo soporta, o update con 'create' anidado.
+      // Para máxima compatibilidad y simplicidad con la relación anidada en update:
+      const cita_actualizada = await tx.cita.update({
+        where: { id: cita_id },
+        data: {
+          total: nuevo_total,
+          servicios: {
+            create: servicios_nuevos.map((srv) => ({
+              servicioId: srv.id,
+              precio: srv.precioBase, // Snapshot del precio actual
+            })),
+          },
+        },
+        include: { servicios: true }, // Retornamos para confirmar
+      });
+
+      return {
+        mensaje: "Cita actualizada correctamente",
+        total_actualizado: Number(cita_actualizada.total),
+        items_count: cita_actualizada.servicios.length,
+      };
+    });
+  }
+
+  /**
    * Cierra una cita (Proceso de Venta).
-   *
-   * LÓGICA COMPLEJA (Sprint 1 Update):
-   * 1. Itera sobre CADA servicio de la cita.
-   * 2. Por cada servicio, busca su receta de materiales.
-   * 3. Descuenta del inventario local la cantidad necesaria.
-   * 4. Si falta material para CUALQUIER servicio, revierte todo (Atomicidad).
-   *
-   * @param cita_id - UUID de la cita.
-   * @param sucursal_id - UUID de la sucursal (Contexto de seguridad).
    */
   async cerrar(cita_id: string, sucursal_id: string) {
-    // Iniciamos transacción interactiva para asegurar ACID
     return this.prisma.$transaction(async (tx) => {
-      // BLOQUE 1: Obtención de Datos Profunda
-      // Necesitamos la Cita -> Servicios -> Definición Servicio -> Receta Materiales
       const cita_completa = await tx.cita.findUnique({
         where: { id: cita_id },
         include: {
           servicios: {
             include: {
-              servicio: {
-                include: {
-                  serviciosMateriales: true, // Receta (BOM)
-                },
-              },
+              servicio: { include: { serviciosMateriales: true } },
             },
           },
           empleado: true,
@@ -162,31 +188,22 @@ export class AppointmentsService {
         },
       });
 
-      // BLOQUE 2: Validaciones de Negocio (Guard Clauses)
-      if (!cita_completa) {
-        throw new NotFoundException("La cita no existe.");
-      }
-      // Seguridad Multi-tenancy
+      if (!cita_completa) throw new NotFoundException("La cita no existe.");
       if (cita_completa.sucursalId !== sucursal_id) {
         throw new BadRequestException(
-          "Error de seguridad: La cita no pertenece a la sucursal activa."
+          "Error de seguridad: Sucursal incorrecta."
         );
       }
-      // Idempotencia
       if (cita_completa.estado === CitaEstado.cerrada) {
         throw new ConflictException("La cita ya fue cerrada previamente.");
       }
 
       const monto_total = Number(cita_completa.total);
 
-      // BLOQUE 3: Procesamiento de Inventario (Multi-Servicio)
-      // Iteramos sobre cada servicio contratado en la cita
+      // Descuento de Inventario
       for (const item_venta of cita_completa.servicios) {
         const receta = item_venta.servicio.serviciosMateriales;
-
-        // Por cada material que requiere este servicio...
         for (const insumo of receta) {
-          // Buscamos si existe stock en ESTA sucursal
           const existencia_actual = await tx.existencia.findUnique({
             where: {
               sucursalId_materialId: {
@@ -196,21 +213,18 @@ export class AppointmentsService {
             },
           });
 
-          // Validación estricta de configuración
           if (!existencia_actual) {
             throw new ConflictException(
-              `Error de configuración: El material '${insumo.materialId}' (requerido por ${item_venta.servicio.nombre}) no está dado de alta en el inventario de esta sucursal.`
+              `Material '${insumo.materialId}' no configurado en sucursal.`
             );
           }
 
-          // Validación de Stock Suficiente
           if (Number(existencia_actual.stockActual) < Number(insumo.cantidad)) {
             throw new ConflictException(
-              `Stock insuficiente: No hay suficiente '${insumo.materialId}' para realizar el servicio '${item_venta.servicio.nombre}'. Requerido: ${insumo.cantidad}, Disponible: ${existencia_actual.stockActual}`
+              `Stock insuficiente: ${insumo.materialId}`
             );
           }
 
-          // Ejecución del Descuento
           await tx.existencia.update({
             where: {
               sucursalId_materialId: {
@@ -218,17 +232,13 @@ export class AppointmentsService {
                 materialId: insumo.materialId,
               },
             },
-            data: {
-              stockActual: { decrement: insumo.cantidad },
-            },
+            data: { stockActual: { decrement: insumo.cantidad } },
           });
         }
       }
 
-      // BLOQUE 4: Fidelización (Puntos)
-      // Regla: 5% del monto total se abona como puntos
+      // Puntos (5%)
       const puntos_a_otorgar = Math.floor(monto_total * 0.05);
-
       if (cita_completa.usuarioId && puntos_a_otorgar > 0) {
         await tx.puntosMovimiento.create({
           data: {
@@ -242,50 +252,39 @@ export class AppointmentsService {
         });
       }
 
-      // BLOQUE 5: Nómina (Comisiones)
+      // Comisiones
       if (cita_completa.empleado) {
-        const pct_comision = Number(cita_completa.empleado.porcentajeComision);
-        const monto_comision = monto_total * (pct_comision / 100);
-
+        const pct = Number(cita_completa.empleado.porcentajeComision);
+        const monto_comision = monto_total * (pct / 100);
         if (monto_comision > 0) {
           await tx.comision.create({
             data: {
               empleadoId: cita_completa.empleado.id,
               citaId: cita_completa.id,
-              porcentaje: pct_comision,
+              porcentaje: pct,
               monto: monto_comision,
             },
           });
         }
       }
 
-      // BLOQUE 6: Cierre y Auditoría
-      // Actualizamos el estado de la cita
+      // Update Estado & Audit
       const cita_actualizada = await tx.cita.update({
         where: { id: cita_id },
         data: { estado: CitaEstado.cerrada },
       });
 
-      // Generamos rastro de auditoría (Observabilidad)
       await tx.auditLog.create({
         data: {
           entidad: "Cita",
           accion: "Cierre",
           sucursalId: sucursal_id,
           usuarioId: cita_completa.usuarioId,
-          descripcion: `Cierre de venta multi-servicio. Total: $${monto_total}`,
-          metadata: {
-            servicios_procesados: cita_completa.servicios.length,
-            puntos_generados: puntos_a_otorgar,
-          },
+          descripcion: `Cierre venta. Total: $${monto_total}`,
         },
       });
 
-      return {
-        ...cita_actualizada,
-        mensaje:
-          "Venta procesada correctamente. Inventario actualizado y puntos asignados.",
-      };
+      return { ...cita_actualizada, mensaje: "Venta procesada correctamente." };
     });
   }
 }
