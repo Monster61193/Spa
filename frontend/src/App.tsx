@@ -5,6 +5,7 @@ import { isAxiosError } from 'axios';
 import { BranchSelector } from './components/branch_selector/branch_selector';
 import { InventoryTable } from './components/inventory/inventory_table';
 import { AppointmentForm } from './components/forms/appointment_form';
+import { AppointmentDetailsModal } from './components/forms/appointment_details_modal';
 
 // Componentes UI y Layout
 import { Modal } from './components/ui/modal';
@@ -60,7 +61,7 @@ type ConfirmationState = {
  * 1. Orquestar la autenticación (Redirección a Login si no hay sesión).
  * 2. Gestionar el layout principal (Header + Main Content).
  * 3. Coordinar los módulos de negocio: Citas e Inventario.
- * 4. Manejar flujos de interacción complejos mediante Modales (Creación, Confirmación, Feedback).
+ * 4. Manejar flujos de interacción complejos mediante Modales (Creación, Confirmación, Feedback, Detalles).
  */
 export const App = () => {
   // --- HOOKS DE CONTEXTO Y DATOS ---
@@ -82,6 +83,10 @@ export const App = () => {
 
   // Control del modal de "Nueva Cita"
   const [is_modal_open, set_is_modal_open] = useState(false);
+
+  // Control de la cita seleccionada para ver detalles (Sprint 2)
+  // Si es null, el modal de detalles está cerrado.
+  const [selected_appointment, set_selected_appointment] = useState<any | null>(null);
 
   // Estado de carga para botones individuales en la tabla (UX: Evitar doble clic)
   const [closing_ids, set_closing_ids] = useState<string[]>([]);
@@ -107,6 +112,14 @@ export const App = () => {
 
   /** Cierra el modal de confirmación y limpia el ID temporal */
   const close_confirmation = () => set_confirmation({ isOpen: false, citaId: null });
+
+  /**
+   * Abre el modal de detalles para una cita específica.
+   * @param appt - Objeto completo de la cita proveniente del hook.
+   */
+  const handleViewDetails = (appt: any) => {
+    set_selected_appointment(appt);
+  };
 
   /**
    * PASO 1: Solicitar confirmación de cierre.
@@ -274,7 +287,23 @@ export const App = () => {
                         </td>
 
                         {/* Acciones Contextuales */}
-                        <td className="text-center">
+                        <td className="text-center" style={{ whiteSpace: 'nowrap' }}>
+                          {/* Botón: Ver Detalles (Nuevo Sprint 2) */}
+                          <button
+                            onClick={() => handleViewDetails(appt)}
+                            className="icon-btn"
+                            title="Ver Detalles Completos"
+                            style={{
+                              marginRight: '0.8rem',
+                              fontSize: '1.2rem',
+                              cursor: 'pointer',
+                              border: 'none',
+                              background: 'none',
+                            }}
+                          >
+                            👁️
+                          </button>
+
                           {appt.estado === 'pendiente' ? (
                             <button
                               className="btn-danger"
@@ -326,7 +355,14 @@ export const App = () => {
           <AppointmentForm />
         </Modal>
 
-        {/* 2. Modal de Confirmación (Seguridad antes de acción destructiva) */}
+        {/* 2. Modal de Detalles de Cita (Visualización) - SPRINT 2 */}
+        <AppointmentDetailsModal
+          isOpen={!!selected_appointment}
+          onClose={() => set_selected_appointment(null)}
+          appointment={selected_appointment}
+        />
+
+        {/* 3. Modal de Confirmación (Seguridad antes de acción destructiva) */}
         <Modal is_open={confirmation.isOpen} on_close={close_confirmation} title="Confirmar Acción">
           <div style={{ textAlign: 'center', padding: '1rem 0' }}>
             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🤔</div>
@@ -356,7 +392,7 @@ export const App = () => {
           </div>
         </Modal>
 
-        {/* 3. Modal de Feedback (Respuesta del Sistema) */}
+        {/* 4. Modal de Feedback (Respuesta del Sistema) */}
         <Modal is_open={feedback.isOpen} on_close={close_feedback} title={feedback.title}>
           <div className={`feedback-content feedback-${feedback.type}`}>
             <div className="feedback-icon" style={{ fontSize: '3rem', textAlign: 'center', marginBottom: '1rem' }}>
