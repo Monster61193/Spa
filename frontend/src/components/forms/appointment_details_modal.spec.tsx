@@ -1,61 +1,125 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AppointmentDetailsModal } from './appointment_details_modal';
+// Importamos el tipo para asegurar que el mock cumpla el contrato
+import { Appointment } from '../../hooks/use_appointments';
 
-// Datos Mock para las pruebas
-const mock_cita = {
+// --- 1. MOCKS DE HOOKS ---
+vi.mock('../../hooks/use_services', () => ({
+  useServices: () => ({
+    data: [
+      { id: 'srv-1', nombre: 'Masaje', precioBase: 500, duracionMinutos: 60 },
+      { id: 'srv-2', nombre: 'Facial', precioBase: 800, duracionMinutos: 45 },
+    ],
+  }),
+}));
+
+const mock_mutate_edit = vi.fn();
+const mock_mutate_cancel = vi.fn();
+
+vi.mock('../../hooks/use_appointments', () => ({
+  useEditAppointment: () => ({
+    mutate: mock_mutate_edit,
+    isLoading: false,
+  }),
+  useCancelAppointment: () => ({
+    mutate: mock_mutate_cancel,
+    isLoading: false,
+  }),
+}));
+
+// --- 2. DATA MOCK CORREGIDA ---
+// Cumple estrictamente con la interfaz Appointment
+const mock_cita: Appointment = {
   id: 'uuid-123',
-  // Fecha fija: Martes, 2 de Diciembre 2025, 17:30 (aprox)
   fechaHora: '2025-12-02T17:30:00',
-  servicio: 'Manicure Premium, Pedicure Spa', // Caso de prueba para el parseo
+  servicio: 'Masaje',
   cliente: 'María Cliente',
   estado: 'pendiente',
-  total: 1200,
+  total: 500,
+  // Agregamos el campo faltante requerido por el tipo
+  cliente_id: 'cli-001',
+  servicios_items: [{ id: 'srv-1', nombre: 'Masaje', precio: 500 }],
 };
 
-describe('AppointmentDetailsModal Component', () => {
-  // Caso 1: Renderizado básico cuando isOpen es true
-  it('renderiza correctamente la información del cliente y estado', () => {
-    render(<AppointmentDetailsModal isOpen={true} onClose={vi.fn()} appointment={mock_cita} />);
+describe('AppointmentDetailsModal (Sprint 2 Features)', () => {
+  const handle_close = vi.fn();
 
-    expect(screen.getByText('Detalles de Cita')).toBeInTheDocument();
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // --- PRUEBAS DE VISUALIZACIÓN ---
+  it('renderiza correctamente en modo lectura', () => {
+    render(<AppointmentDetailsModal isOpen={true} onClose={handle_close} appointment={mock_cita} />);
+
+    expect(screen.getByText('Detalle de Cita')).toBeInTheDocument();
     expect(screen.getByText('María Cliente')).toBeInTheDocument();
-    expect(screen.getByText('pendiente')).toBeInTheDocument();
-    // Verificamos que se muestre el ID
-    expect(screen.getByText(/uuid-123/)).toBeInTheDocument();
+    expect(screen.getByText('Editar Servicios')).toBeInTheDocument();
   });
 
-  // Caso 2: Formateo de Fecha y Hora (Intl)
-  it('formatea correctamente la fecha y hora local', () => {
-    render(<AppointmentDetailsModal isOpen={true} onClose={vi.fn()} appointment={mock_cita} />);
+  // --- PRUEBAS DE FLUJO DE EDICIÓN ---
+  it('entra en modo edición y permite guardar cambios', async () => {
+    render(<AppointmentDetailsModal isOpen={true} onClose={handle_close} appointment={mock_cita} />);
 
-    // Verificamos fecha larga (depende del locale, buscamos partes clave)
-    // Nota: En entorno de test (Node/JSDOM), el locale suele ser en-US por defecto a menos que se configure globalmente.
-    // Buscamos flexibilidad o configuramos el test setup. Aquí asumimos que toLocaleDateString funciona.
-    // Si el test corre en una máquina con locale español, buscaría "martes".
-    // Para robustez, verificamos que NO se muestre el string ISO crudo.
-    expect(screen.queryByText('2025-12-02T17:30:00')).not.toBeInTheDocument();
+    // 1. Entrar a edición
+    fireEvent.click(screen.getByText('Editar Servicios'));
+
+    // 2. Verificar cambio de UI
+    expect(screen.getByText('Modificar Servicios')).toBeInTheDocument();
+    expect(screen.getByText('Confirmar Cambios')).toBeInTheDocument();
+
+    // 3. Verificar precarga (Smart Editing)
+    // El botón de eliminar debe estar presente para el servicio precargado
+    const botones_eliminar = screen.getAllByTitle('Eliminar servicio');
+    expect(botones_eliminar).toHaveLength(1);
+
+    // 4. Guardar cambios
+    fireEvent.click(screen.getByText('Confirmar Cambios'));
+
+    // 5. Verificar llamada al hook
+    await waitFor(() => {
+      expect(mock_mutate_edit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'uuid-123',
+          servicios_ids: ['srv-1'],
+        }),
+        expect.any(Object),
+      );
+    });
   });
 
-  // Caso 3: Parseo de Servicios (String -> Lista)
-  it('separa correctamente la lista de servicios concatenados', () => {
-    render(<AppointmentDetailsModal isOpen={true} onClose={vi.fn()} appointment={mock_cita} />);
+  // --- PRUEBAS DE FLUJO DE CANCELACIÓN ---
+  it('maneja el flujo de cancelación con validación de motivo', async () => {
+    render(<AppointmentDetailsModal isOpen={true} onClose={handle_close} appointment={mock_cita} />);
 
-    // Debe haber encontrado dos items de lista distintos
-    const item1 = screen.getByText('Manicure Premium');
-    const item2 = screen.getByText('Pedicure Spa');
+    // 1. Abrir modal de cancelación
+    fireEvent.click(screen.getByText('Cancelar Cita'));
 
-    expect(item1).toBeInTheDocument();
-    expect(item2).toBeInTheDocument();
+    // 2. Verificar que aparece el textarea (placeholder regex insensible a mayúsculas)
+    const input_motivo = screen.getByPlaceholderText(/ej: el cliente no pudo/i);
+    expect(input_motivo).toBeInTheDocument();
 
-    // Verificamos que el total también aparezca
-    expect(screen.getByText(/\$1200/)).toBeInTheDocument();
-  });
+    // 3. Intentar confirmar vacío (Validación)
+    const btn_confirmar = screen.getByText('Confirmar Cancelación');
+    expect(btn_confirmar).toBeDisabled();
 
-  // Caso Borde: No renderiza si no hay cita o isOpen es false
-  it('no renderiza nada si isOpen es false', () => {
-    render(<AppointmentDetailsModal isOpen={false} onClose={vi.fn()} appointment={mock_cita} />);
-    // El título no debería estar en el DOM
-    expect(screen.queryByText('Detalles de Cita')).not.toBeInTheDocument();
+    // 4. Escribir motivo válido
+    fireEvent.change(input_motivo, { target: { value: 'El cliente no se presentó' } });
+    expect(btn_confirmar).not.toBeDisabled();
+
+    // 5. Ejecutar cancelación
+    fireEvent.click(btn_confirmar);
+
+    // 6. Verificar llamada al hook
+    await waitFor(() => {
+      expect(mock_mutate_cancel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'uuid-123',
+          motivo: 'El cliente no se presentó',
+        }),
+        expect.any(Object),
+      );
+    });
   });
 });

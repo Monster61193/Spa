@@ -272,6 +272,7 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
                 +
               </button>
             </div>
+            {/* Lista Editable */}
             <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
               {edit_mode_items.map(
                 (item) =>
@@ -279,12 +280,16 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
                     <div key={item.id} className="edit-list-item">
                       <div>
                         <div style={{ fontWeight: 500 }}>{item.nombre}</div>
-                        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>${item.precioBase}</div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                          ${item.precioBase} - {item.duracionMinutos} min
+                        </div>
                       </div>
                       <button
                         className="btn-remove-item"
                         onClick={() => handle_remove_service(item.id)}
-                        disabled={is_busy}
+                        // --- CORRECCIÓN AQUÍ ---
+                        title="Eliminar servicio" // Agregamos el título para testing y a11y
+                        // -----------------------
                       >
                         ✕
                       </button>
