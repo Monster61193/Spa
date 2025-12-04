@@ -1,5 +1,5 @@
 /* =========================================
-   VARIABLES & TEMA (Dark/Light Mode)
+   1. VARIABLES & TEMA (Dark/Light Mode)
    ========================================= */
 :root {
   /* Paleta Clara (Default) */
@@ -7,7 +7,7 @@
   --bg-panel: #ffffff;
   --text-primary: #111111;
   --text-secondary: #64748b;
-  --border-color: rgba(0, 0, 0, 0.08); /* Un poco más visible */
+  --border-color: rgba(0, 0, 0, 0.08);
   --shadow-color: rgba(15, 23, 42, 0.08);
 
   --input-bg: #ffffff;
@@ -26,7 +26,7 @@
   --danger-hover: #dc2626;
 }
 
-/* Paleta Oscura (data-theme="dark") */
+/* Paleta Oscura */
 [data-theme='dark'] {
   --bg-body: #0f172a;
   --bg-panel: #1e293b;
@@ -45,7 +45,7 @@
 }
 
 /* =========================================
-   RESET & BASE
+   2. RESET & LAYOUT GLOBAL
    ========================================= */
 body {
   margin: 0;
@@ -57,10 +57,6 @@ body {
     color 0.3s ease;
 }
 
-#root {
-  min-height: 100vh;
-}
-
 .layout-root {
   min-height: 100vh;
   display: flex;
@@ -68,7 +64,7 @@ body {
 }
 
 .app-shell {
-  max-width: 1024px; /* Aumentado para dar más espacio a la tabla */
+  max-width: 1024px;
   width: 100%;
   margin: 0 auto;
   padding: 2rem 1.5rem 3rem;
@@ -79,10 +75,10 @@ body {
 }
 
 /* =========================================
-   COMPONENTES UI
+   3. COMPONENTES UI BASE
    ========================================= */
 
-/* Paneles */
+/* Paneles (Tarjetas) */
 .panel {
   background: var(--bg-panel);
   padding: 1.5rem;
@@ -98,20 +94,12 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem; /* Más espacio entre título y contenido */
+  margin-bottom: 1.5rem;
 }
 
-/* Tipografía */
-.welcome-section {
-  margin-bottom: 2rem;
-}
-
+/* Utilidades de Texto */
 .subtitle {
   color: var(--text-secondary);
-}
-
-.mt-2 {
-  margin-top: 0.5rem;
 }
 .text-center {
   text-align: center;
@@ -119,11 +107,27 @@ body {
 .text-secondary {
   color: var(--text-secondary);
 }
-.p-4 {
-  padding: 1rem;
+.mt-2 {
+  margin-top: 0.5rem;
+}
+
+/* Inputs y Selects */
+input,
+select {
+  background-color: var(--input-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--input-border);
+  padding: 0.6rem;
+  border-radius: 6px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Botones */
+button {
+  font-family: inherit;
+}
+
 .btn-primary {
   background-color: var(--primary-color);
   color: white;
@@ -152,8 +156,11 @@ body {
 .btn-danger:hover {
   background-color: var(--danger-hover);
 }
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
-/* Botón Secundario (Nuevo para "Detalle") */
 .btn-secondary-action {
   background: transparent;
   border: 1px solid var(--border-color);
@@ -174,32 +181,64 @@ body {
   border-color: var(--text-secondary);
 }
 
-/* Inputs */
-input,
-select {
-  background-color: var(--input-bg);
+.btn-cancel {
+  padding: 0.6rem 1.2rem;
+  border: 1px solid var(--border-color);
+  background: var(--bg-panel);
   color: var(--text-primary);
-  border: 1px solid var(--input-border);
-  padding: 0.6rem;
   border-radius: 6px;
-  width: 100%;
-  box-sizing: border-box;
+  cursor: pointer;
+  font-weight: 500;
+}
+.btn-cancel:hover {
+  background-color: var(--border-color);
 }
 
 /* =========================================
-   TABLAS (Mejoradas)
+   4. COMPONENTES ESPECÍFICOS DASHBOARD
    ========================================= */
+
+/* Header de Bienvenida */
+.welcome-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.welcome-logo {
+  font-size: 2rem;
+}
+.welcome-title {
+  margin: 0;
+  font-size: 1.8rem;
+  color: var(--text-primary);
+}
+.welcome-date {
+  margin: 0.2rem 0 0 0;
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
+/* Selector de Sucursal */
+.section-spacer {
+  margin-bottom: 1.5rem;
+}
+.branch-info {
+  margin-top: 0.5rem;
+  color: var(--text-secondary);
+}
+
+/* Tabla de Agenda */
 .table-responsive {
   overflow-x: auto;
 }
-
-table {
+.agenda-table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 0.5rem;
 }
 
-th {
+.agenda-table th {
   padding: 1rem;
   text-align: left;
   font-weight: 600;
@@ -210,19 +249,57 @@ th {
   border-bottom: 2px solid var(--border-color);
 }
 
-td {
-  padding: 1.2rem 1rem; /* Más espacio vertical */
+.agenda-table td {
+  padding: 1.2rem 1rem;
   text-align: left;
   border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
   font-size: 0.95rem;
 }
-
-tr:last-child td {
+.agenda-table tr:last-child td {
   border-bottom: none;
 }
 
-/* Badges */
+/* Columnas Específicas */
+.col-time {
+  width: 12%;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.col-service {
+  width: 35%;
+  font-weight: 600;
+}
+.col-client {
+  width: 20%;
+}
+.col-status {
+  width: 13%;
+  text-align: center;
+}
+.col-actions {
+  width: 20%;
+  text-align: center;
+}
+
+/* Contenedor de Acciones en Tabla */
+.table-actions-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+/* Estado Vacío */
+.empty-state-row td {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary);
+}
+
+/* Badges de Estado */
 .badge-status {
   padding: 4px 12px;
   border-radius: 999px;
@@ -231,12 +308,10 @@ tr:last-child td {
   display: inline-block;
   text-transform: capitalize;
 }
-
 .status-pendiente {
   background-color: var(--status-pending-bg);
   color: var(--status-pending-text);
 }
-
 .status-confirmada,
 .status-cerrada {
   background-color: var(--status-confirmed-bg);
@@ -244,7 +319,7 @@ tr:last-child td {
 }
 
 /* =========================================
-   MODALES & EXTRAS (Sin cambios mayores)
+   5. MODALES Y ANIMACIONES
    ========================================= */
 .modal-overlay {
   position: fixed;
@@ -268,7 +343,7 @@ tr:last-child td {
   border-radius: 16px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   width: 90%;
-  max-width: 500px;
+  max-width: 600px;
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
@@ -296,7 +371,55 @@ tr:last-child td {
   color: var(--text-primary);
 }
 
-/* Animaciones */
+/* Contenido Interno de Modales */
+.confirmation-container {
+  text-align: center;
+  padding: 1rem 0;
+}
+.confirmation-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+.confirmation-text {
+  font-size: 1.1rem;
+  margin-bottom: 2rem;
+  color: var(--text-primary);
+}
+.confirmation-subtext {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  display: block;
+  margin-top: 0.5rem;
+}
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+/* Feedback */
+.feedback-content {
+  text-align: center;
+  padding: 1rem 0;
+}
+.feedback-icon-lg {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  animation: popIn 0.3s;
+}
+.feedback-msg-center {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.feedback-actions {
+  text-align: center;
+  margin-top: 1.5rem;
+}
+
+/* Keyframes */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -325,20 +448,80 @@ tr:last-child td {
     opacity: 1;
   }
 }
+/* =========================================
+   6. HEADER / BARRA DE NAVEGACIÓN 
+   ========================================= */
 
-/* Feedback */
-.feedback-content {
-  text-align: center;
-  padding: 1rem 0;
+.admin-header {
+  background-color: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.8rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 100; /* Asegura que quede por encima del contenido */
+  height: 64px; /* Altura fija para consistencia */
+  box-sizing: border-box;
 }
-.feedback-icon {
-  font-size: 3rem;
-  margin-bottom: 1rem;
-  animation: popIn 0.3s;
+
+.header-left,
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem; /* Espacio entre elementos */
 }
-.feedback-message {
-  font-size: 1.1rem;
-  color: var(--text-secondary);
-  margin-bottom: 2rem;
-  line-height: 1.5;
+
+/* Botón de Menú (Hamburguesa) */
+.icon-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.icon-btn:hover {
+  background-color: var(--border-color);
+}
+
+/* Enlace / Título del sitio */
+.nav-link {
+  text-decoration: none;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+/* Separador vertical en el header */
+.header-separator {
+  width: 1px;
+  height: 24px;
+  background-color: var(--border-color);
+  margin: 0 0.5rem;
+}
+
+/* Ajuste específico para el botón de logout en el header */
+.btn-logout {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #ef4444;
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid transparent;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-logout:hover {
+  background-color: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.3);
 }

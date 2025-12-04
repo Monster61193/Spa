@@ -105,3 +105,139 @@
   background-color: var(--border-color);
   border-color: var(--text-secondary);
 }
+
+/* --- 1. Grupo Selector (Select + Botón Agregar) --- */
+.service-selector-group {
+  display: flex; /* Alineación horizontal */
+  gap: 0.8rem; /* Espacio entre el select y el botón */
+  align-items: center; /* Centrado vertical */
+  margin-bottom: 1.5rem;
+  width: 100%;
+}
+
+.service-select {
+  flex-grow: 1;
+
+  padding: 0 1rem;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  background-color: var(--input-bg);
+  color: var(--text-primary);
+  height: 50px;
+  font-size: 1rem; /* Asegura que la fuente sea legible */
+}
+
+/* Ajuste al botón primario (+) para que coincida con la nueva altura */
+.service-selector-group .btn-primary {
+  height: 50px; /* Igualamos la altura del select */
+  width: 50px; /* Lo hacemos cuadrado para que se vea más estético */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0; /* Quitamos padding lateral para centrar el ícono */
+  font-size: 1.5rem;
+}
+
+/* --- 2. Item de Lista (Servicio + Botón Eliminar) --- */
+.edit-list-item {
+  display: flex;
+  justify-content: space-between; /* Texto a la izquierda, botón a la derecha */
+  align-items: center; /* Centrado vertical perfecto */
+  padding: 0.8rem 1rem;
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  margin-bottom: 0.6rem;
+  border-radius: 8px;
+  transition: border-color 0.2s;
+}
+
+.edit-list-item:hover {
+  border-color: var(--text-secondary);
+}
+
+/* --- 3. Botón Eliminar (La "X") --- */
+.btn-remove-item {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+
+  /* Color Rojo usando la variable global */
+  color: var(--danger-color);
+
+  /* Tamaño y centrado */
+  font-size: 1.1rem;
+  font-weight: bold;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+
+  /* Flex para centrar la X perfectamente en el hover */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  transition: all 0.2s ease;
+  margin-left: 1rem; /* Margen izquierdo para no pegarse al texto */
+}
+
+.btn-remove-item:hover {
+  background-color: rgba(239, 68, 68, 0.1); /* Fondo rojo muy suave */
+  transform: scale(1.1); /* Pequeño efecto pop */
+}
+
+/* --- ESTILOS PARA MODAL DE CANCELACIÓN --- */
+
+.cancel-form-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cancel-warning-text {
+  color: var(--text-primary);
+  font-size: 1rem;
+  margin: 0;
+}
+
+.cancel-textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 0.8rem;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  background-color: var(--input-bg);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.cancel-textarea:focus {
+  outline: none;
+  border-color: var(--danger-color); /* Rojo para indicar zona de peligro */
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
+}
+
+.text-error {
+  color: var(--danger-color);
+  font-size: 0.85rem;
+  margin-top: -0.5rem;
+}
+
+/* --- ESTILOS COMPARTIDOS FEEDBACK (Local) --- */
+.local-feedback-content {
+  text-align: center;
+  padding: 1rem 0;
+}
+
+.local-feedback-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.local-feedback-msg {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}

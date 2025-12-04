@@ -23,6 +23,14 @@ const EditarItemsSchema = z.object({
     .array(z.string().min(1))
     .min(1, "La cita debe tener al menos un servicio asignado."),
 });
+/**
+ * Esquema para Cancelar valida el motivo de la cancelacion el motivo
+ * */
+const CancelarSchema = z.object({
+  motivo: z
+    .string()
+    .min(5, "El motivo de cancelación es obligatorio (mín. 5 caracteres)."),
+});
 
 /**
  * Controlador de Citas (API Gateway).
@@ -80,6 +88,22 @@ export class AppointmentsController {
       datos_validos.servicios_ids,
       branch_id
     );
+  }
+
+  /**
+   * POST /appointments/:id/cancel
+   * Cancela una cita pendiente.
+   */
+  @Post(":id/cancel")
+  async cancelar(
+    @Param("id") id: string,
+    @Body() payload: unknown,
+    @Req() request: Request & { branchId?: string }
+  ) {
+    const branch_id = request.branchId ?? "branch-principal";
+    const datos = CancelarSchema.parse(payload);
+
+    return this.appointments_service.cancelar(id, datos.motivo, branch_id);
   }
 
   /**

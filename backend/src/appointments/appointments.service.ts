@@ -16,34 +16,48 @@ export class AppointmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Lista las citas de una sucursal.
+   * Lista las citas de una sucursal con metadatos para la UI.
+   * Se incluyen IDs de relaciones para permitir la edición en el frontend.
    */
   async listar(sucursal_id: string) {
     const citas_db = await this.prisma.cita.findMany({
       where: { sucursalId: sucursal_id },
       orderBy: { fechaHora: "asc" },
       include: {
-        usuario: { select: { nombre: true, email: true } },
+        usuario: { select: { id: true, nombre: true, email: true } }, // Traemos ID
         servicios: {
           include: {
-            servicio: { select: { nombre: true, duracionMinutos: true } },
+            servicio: {
+              select: { id: true, nombre: true, duracionMinutos: true },
+            }, // Traemos ID
           },
         },
       },
     });
 
     return citas_db.map((cita) => {
-      const lista_servicios = cita.servicios
+      const lista_nombres = cita.servicios
         .map((item) => item.servicio.nombre)
         .join(", ");
 
+      // Mapeamos a una estructura plana pero rica en datos
       return {
         id: cita.id,
         fechaHora: cita.fechaHora,
         estado: cita.estado,
+
+        // Datos de presentación
         cliente: cita.usuario?.nombre ?? "Cliente Anónimo",
-        servicio: lista_servicios || "Sin servicios asignados",
+        servicio: lista_nombres || "Sin servicios asignados",
         total: Number(cita.total),
+
+        // Metadatos para Edición (Hidden fields en tabla, usados en Modal)
+        cliente_id: cita.usuarioId,
+        servicios_items: cita.servicios.map((s) => ({
+          id: s.servicio.id,
+          nombre: s.servicio.nombre,
+          precio: Number(s.precio),
+        })),
       };
     });
   }
@@ -167,6 +181,46 @@ export class AppointmentsService {
         total_actualizado: Number(cita_actualizada.total),
         items_count: cita_actualizada.servicios.length,
       };
+    });
+  }
+
+  /**
+   * Cancela una cita y registra el evento en auditoría.
+   */
+  async cancelar(cita_id: string, motivo: string, sucursal_id: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const cita = await tx.cita.findUnique({ where: { id: cita_id } });
+
+      if (!cita) throw new NotFoundException("Cita no encontrada");
+
+      if (cita.sucursalId !== sucursal_id) {
+        throw new BadRequestException("La cita no pertenece a esta sucursal");
+      }
+
+      if (cita.estado !== CitaEstado.pendiente) {
+        throw new ConflictException(
+          "Solo se pueden cancelar citas pendientes."
+        );
+      }
+
+      // Actualizamos estado
+      const cita_cancelada = await tx.cita.update({
+        where: { id: cita_id },
+        data: { estado: CitaEstado.cancelada },
+      });
+
+      // Registramos en auditoría (Vital para saber por qué se canceló)
+      await tx.auditLog.create({
+        data: {
+          entidad: "Cita",
+          accion: "Cancelación",
+          sucursalId: sucursal_id,
+          usuarioId: cita.usuarioId, // Si existe
+          descripcion: `Motivo: ${motivo}`,
+        },
+      });
+
+      return { ...cita_cancelada, mensaje: "Cita cancelada correctamente." };
     });
   }
 

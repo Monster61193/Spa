@@ -1,247 +1,231 @@
 import { useState } from 'react';
 import { isAxiosError } from 'axios';
 
-// Componentes de Negocio (Módulos)
+// --- COMPONENTES DE NEGOCIO (Dominios) ---
 import { BranchSelector } from './components/branch_selector/branch_selector';
 import { InventoryTable } from './components/inventory/inventory_table';
 import { AppointmentForm } from './components/forms/appointment_form';
 import { AppointmentDetailsModal } from './components/forms/appointment_details_modal';
 
-// Componentes UI y Layout
+// --- COMPONENTES UI / LAYOUT ---
 import { Modal } from './components/ui/modal';
 import { Header } from './components/layout/header';
 import { LoginPage } from './pages/login_page';
 
-// Hooks y Contextos
+// --- HOOKS Y CONTEXTOS (Capa de Aplicación) ---
 import { useAppointments } from './hooks/use_appointments';
 import { use_inventory } from './hooks/use_inventory';
 import { useBranch } from './contexts/branch.context';
 import { useAuth } from './contexts/auth.context';
 
-// Configuración
+// --- INFRAESTRUCTURA ---
 import { api_client } from './api/api_client';
 
-// --- DEFINICIÓN DE TIPOS LOCALES ---
+// --- ESTILOS GLOBALES UNIFICADOS ---
+import './App.css';
 
-/**
- * Define el estado del modal de retroalimentación (Feedback Modal).
- */
+// --- DEFINICIÓN DE TIPOS LOCALES ---
 type FeedbackState = {
-  isOpen: boolean;
+  is_open: boolean;
   title: string;
   message: string;
   type: 'success' | 'warning' | 'error';
 };
 
-/**
- * Define el estado del modal de confirmación de acciones destructivas.
- */
 type ConfirmationState = {
-  isOpen: boolean;
-  citaId: string | null;
+  is_open: boolean;
+  cita_id: string | null;
 };
 
-// --- COMPONENTE PRINCIPAL ---
-
 /**
- * Componente Raíz de la Aplicación (Dashboard).
+ * Componente Principal: Dashboard Operativo.
+ * Gestiona el ciclo de vida completo de las operaciones de Citas e Inventario.
  */
 export const App = () => {
-  // --- HOOKS DE CONTEXTO Y DATOS ---
+  // --- HOOKS DE CONTEXTO ---
   const { is_authenticated } = useAuth();
-  const { activeBranch } = useBranch();
-  const { data: appointments = [], isLoading, refetch } = useAppointments();
-  const { data: inventoryData = [], isLoading: isLoadingInventory } = use_inventory();
+  const { activeBranch: active_branch } = useBranch();
 
-  // --- ESTADOS LOCALES (UI) ---
-  const [is_modal_open, set_is_modal_open] = useState(false);
+  // --- HOOKS DE DATOS ---
+  const {
+    data: appointments_list = [],
+    isLoading: is_loading_appointments,
+    refetch: refetch_appointments,
+  } = useAppointments();
+
+  const { data: inventory_data = [], isLoading: is_loading_inventory } = use_inventory();
+
+  // --- ESTADOS DE UI ---
+  const [is_form_modal_open, set_is_form_modal_open] = useState(false);
   const [selected_appointment, set_selected_appointment] = useState<any | null>(null);
-  const [closing_ids, set_closing_ids] = useState<string[]>([]);
+  const [processing_ids, set_processing_ids] = useState<string[]>([]);
 
+  // Estados Modales Auxiliares
   const [feedback, set_feedback] = useState<FeedbackState>({
-    isOpen: false,
+    is_open: false,
     title: '',
     message: '',
     type: 'success',
   });
 
   const [confirmation, set_confirmation] = useState<ConfirmationState>({
-    isOpen: false,
-    citaId: null,
+    is_open: false,
+    cita_id: null,
   });
 
-  // --- HANDLERS (Lógica de Interacción) ---
+  // --- HANDLERS (Lógica de Negocio) ---
 
-  const close_feedback = () => set_feedback((prev) => ({ ...prev, isOpen: false }));
-  const close_confirmation = () => set_confirmation({ isOpen: false, citaId: null });
+  const handle_close_feedback = () => set_feedback((prev) => ({ ...prev, is_open: false }));
 
-  const handleViewDetails = (appt: any) => {
-    set_selected_appointment(appt);
-  };
+  const handle_cancel_confirmation = () => set_confirmation({ is_open: false, cita_id: null });
 
-  const request_close_appointment = (cita_id: string) => {
-    set_confirmation({
-      isOpen: true,
-      citaId: cita_id,
+  const handle_view_details = (appointment: any) => set_selected_appointment(appointment);
+
+  const handle_request_close = (cita_id: string) => set_confirmation({ is_open: true, cita_id });
+
+  /**
+   * NUEVO HANDLER: Gestiona el éxito al crear una cita.
+   * 1. Cierra el modal del formulario.
+   * 2. Muestra feedback visual de éxito.
+   * 3. Refresca la tabla de citas (adiós reload).
+   */
+  const handle_appointment_created = () => {
+    set_is_form_modal_open(false); // Cierra el modal
+    set_feedback({
+      is_open: true,
+      title: '¡Cita Agendada!',
+      message: 'La cita se ha registrado correctamente en el sistema.',
+      type: 'success',
     });
+    refetch_appointments(); // Actualización "live"
   };
 
-  const execute_close_appointment = async () => {
-    const cita_id = confirmation.citaId;
-    if (!cita_id) return;
+  /**
+   * Ejecuta el cierre de venta (Transacción).
+   */
+  const handle_execute_close = async () => {
+    const target_id = confirmation.cita_id;
+    if (!target_id) return;
 
-    close_confirmation();
-    set_closing_ids((prev) => [...prev, cita_id]);
+    handle_cancel_confirmation();
+    set_processing_ids((prev) => [...prev, target_id]);
 
     try {
-      const response = await api_client.post('/appointments/close', { citaId: cita_id });
+      const response = await api_client.post('/appointments/close', { citaId: target_id });
       set_feedback({
-        isOpen: true,
+        is_open: true,
         title: '🎉 ¡Cita Cerrada!',
-        message: response.data.mensaje || 'Operación completada con éxito.',
+        message: response.data.mensaje || 'Venta procesada y stock actualizado.',
         type: 'success',
       });
-      refetch();
+      refetch_appointments();
     } catch (error) {
-      console.error('Error crítico al cerrar cita:', error);
+      console.error('Error crítico en cierre de cita:', error);
       let titulo = 'Error del Sistema';
-      let mensaje = 'Ocurrió un error inesperado.';
+      let mensaje = 'Ocurrió un error inesperado de red.';
       let tipo: 'error' | 'warning' = 'error';
 
       if (isAxiosError(error) && error.response) {
         const status = error.response.status;
-        const msg = error.response.data.message;
+        const msg_backend = error.response.data.message;
         if (status === 409) {
           titulo = '⚠️ Acción Bloqueada';
-          mensaje = msg;
+          mensaje = msg_backend;
           tipo = 'warning';
         } else if (status === 403) {
           titulo = '⛔ Acceso Denegado';
-          mensaje = 'No tienes permisos para realizar esta acción en esta sucursal.';
+          mensaje = 'No tienes permisos en esta sucursal.';
         } else {
-          mensaje = `Error (${status}): ${msg || mensaje}`;
+          mensaje = `Error (${status}): ${msg_backend || mensaje}`;
         }
       }
-      set_feedback({ isOpen: true, title: titulo, message: mensaje, type: tipo });
+      set_feedback({ is_open: true, title: titulo, message: mensaje, type: tipo });
     } finally {
-      set_closing_ids((prev) => prev.filter((id) => id !== cita_id));
+      set_processing_ids((prev) => prev.filter((id) => id !== target_id));
     }
   };
 
+  // Guard de autenticación
   if (!is_authenticated) return <LoginPage />;
 
-  // --- LAYOUT PRINCIPAL ---
   return (
     <div className="layout-root">
       <Header />
 
       <main className="app-shell">
-        {/* SECCIÓN DE BIENVENIDA */}
-        <div
-          className="welcome-section"
-          style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1.5rem' }}
-        >
-          <div className="logo-container">
-            <span style={{ fontSize: '2rem' }}>🧖‍♀️</span>
-          </div>
+        {/* 1. BIENVENIDA */}
+        <div className="welcome-header">
+          <div className="welcome-logo">🧖‍♀️</div>
           <div>
-            <h1 style={{ margin: 0, fontSize: '1.8rem' }}>Bienvenido al Panel de Control</h1>
-            <p className="subtitle" style={{ margin: '0.2rem 0 0 0' }}>
+            <h1 className="welcome-title">Bienvenido al Panel de Control</h1>
+            <p className="welcome-date">
               {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
           </div>
         </div>
 
-        {/* SECCIÓN: SELECTOR DE CONTEXTO */}
-        <section className="panel" style={{ marginBottom: '1.5rem' }}>
+        {/* 2. SELECTOR DE SUCURSAL */}
+        <section className="panel section-spacer">
           <BranchSelector />
-          {activeBranch && (
-            <p className="subtitle mt-2">
-              Sucursal activa: <strong>{activeBranch.nombre}</strong>
+          {active_branch && (
+            <p className="branch-info">
+              Sucursal activa: <strong>{active_branch.nombre}</strong>
             </p>
           )}
         </section>
 
-        {/* SECCIÓN: GESTIÓN DE CITAS (Core Business) */}
+        {/* 3. AGENDA */}
         <section className="panel">
           <div className="panel-header">
             <h2>Agenda del Día</h2>
-            <button className="btn-primary" onClick={() => set_is_modal_open(true)}>
+            <button className="btn-primary" onClick={() => set_is_form_modal_open(true)}>
               + Nueva Cita
             </button>
           </div>
 
-          {isLoading ? (
+          {is_loading_appointments ? (
             <p>Cargando agenda...</p>
           ) : (
             <div className="table-responsive">
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table className="agenda-table">
                 <thead>
                   <tr>
-                    {/* Ajuste de anchos para mejor distribución visual */}
-                    <th style={{ width: '12%', textAlign: 'left' }}>Hora</th>
-                    <th style={{ width: '35%', textAlign: 'left' }}>Servicio(s)</th>
-                    <th style={{ width: '20%', textAlign: 'left' }}>Cliente</th>
-                    <th className="text-center" style={{ width: '13%' }}>
-                      Estado
-                    </th>
-                    <th className="text-center" style={{ width: '20%' }}>
-                      Acciones
-                    </th>
+                    <th className="col-time">Hora</th>
+                    <th className="col-service">Servicio(s)</th>
+                    <th className="col-client">Cliente</th>
+                    <th className="col-status">Estado</th>
+                    <th className="col-actions">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {appointments.length > 0 ? (
-                    appointments.map((appt) => (
+                  {appointments_list.length > 0 ? (
+                    appointments_list.map((appt) => (
                       <tr key={appt.id}>
-                        <td style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>
+                        <td className="col-time">
                           {new Date(appt.fechaHora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </td>
-                        <td style={{ fontWeight: 600 }}>{appt.servicio}</td>
+                        <td className="col-service">{appt.servicio}</td>
                         <td>{appt.cliente}</td>
-
-                        <td className="text-center">
+                        <td className="col-status">
                           <span className={`badge-status status-${appt.estado}`}>{appt.estado}</span>
                         </td>
-
-                        <td className="text-center" style={{ whiteSpace: 'nowrap' }}>
-                          {/* Contenedor Flex para centrar botones independientemente de la cantidad */}
-                          <div
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'center',
-                              alignItems: 'center',
-                              gap: '0.5rem',
-                              minHeight: '36px', // Altura mínima para evitar saltos visuales
-                            }}
-                          >
+                        <td className="col-actions">
+                          <div className="table-actions-container">
                             <button
-                              onClick={() => handleViewDetails(appt)}
+                              onClick={() => handle_view_details(appt)}
                               className="btn-secondary-action"
-                              title="Ver detalles"
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.3rem',
-                                padding: '0.4rem 0.8rem',
-                              }}
+                              title="Ver detalles completos"
                             >
                               <span>📄</span> Detalle
                             </button>
-
                             {appt.estado === 'pendiente' && (
                               <button
                                 className="btn-danger"
-                                onClick={() => request_close_appointment(appt.id)}
-                                disabled={closing_ids.includes(appt.id)}
-                                style={{
-                                  opacity: closing_ids.includes(appt.id) ? 0.6 : 1,
-                                  cursor: closing_ids.includes(appt.id) ? 'not-allowed' : 'pointer',
-                                  padding: '0.4rem 0.8rem',
-                                  fontSize: '0.9rem',
-                                }}
+                                onClick={() => handle_request_close(appt.id)}
+                                disabled={processing_ids.includes(appt.id)}
+                                title="Procesar cierre de venta"
                               >
-                                {closing_ids.includes(appt.id) ? '...' : 'Cerrar'}
+                                {processing_ids.includes(appt.id) ? '...' : 'Cerrar'}
                               </button>
                             )}
                           </div>
@@ -249,10 +233,8 @@ export const App = () => {
                       </tr>
                     ))
                   ) : (
-                    <tr>
-                      <td colSpan={5} className="text-center p-4 text-secondary">
-                        No hay citas registradas en esta sucursal para hoy.
-                      </td>
+                    <tr className="empty-state-row">
+                      <td colSpan={5}>No hay citas registradas en esta sucursal para hoy.</td>
                     </tr>
                   )}
                 </tbody>
@@ -261,66 +243,60 @@ export const App = () => {
           )}
         </section>
 
-        {/* SECCIÓN: INVENTARIO */}
+        {/* 4. INVENTARIO */}
         <section className="panel">
           <div className="panel-header">
             <h2>📦 Inventario en Tiempo Real</h2>
           </div>
-          <InventoryTable data={inventoryData} loading={isLoadingInventory} />
+          <InventoryTable data={inventory_data} loading={is_loading_inventory} />
         </section>
 
         {/* --- MODALES --- */}
-        <Modal is_open={is_modal_open} on_close={() => set_is_modal_open(false)} title="">
-          <AppointmentForm />
+
+        {/* Modal: Crear Cita (Conectado al nuevo Handler) */}
+        <Modal is_open={is_form_modal_open} on_close={() => set_is_form_modal_open(false)}>
+          <AppointmentForm onSuccess={handle_appointment_created} />
         </Modal>
 
+        {/* Modal: Detalles */}
         <AppointmentDetailsModal
           isOpen={!!selected_appointment}
           onClose={() => set_selected_appointment(null)}
           appointment={selected_appointment}
         />
 
-        <Modal is_open={confirmation.isOpen} on_close={close_confirmation} title="Confirmar Acción">
-          <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🤔</div>
-            <p style={{ fontSize: '1.1rem', marginBottom: '2rem', color: 'var(--text-primary)' }}>
-              ¿Estás seguro de cerrar esta cita? <br />
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+        {/* Modal: Confirmación Cierre */}
+        <Modal is_open={confirmation.is_open} on_close={handle_cancel_confirmation} title="Confirmar Acción">
+          <div className="confirmation-container">
+            <div className="confirmation-icon">🤔</div>
+            <p className="confirmation-text">
+              ¿Estás seguro de cerrar esta cita?
+              <span className="confirmation-subtext">
                 Se descontará inventario y se generarán puntos automáticamente.
               </span>
             </p>
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-              <button
-                onClick={close_confirmation}
-                style={{
-                  padding: '0.6rem 1.2rem',
-                  border: '1px solid #ccc',
-                  background: 'white',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                }}
-              >
+            <div className="modal-actions">
+              <button onClick={handle_cancel_confirmation} className="btn-cancel">
                 Cancelar
               </button>
-              <button className="btn-primary" onClick={execute_close_appointment} autoFocus>
+              <button className="btn-primary" onClick={handle_execute_close} autoFocus>
                 Sí, Confirmar
               </button>
             </div>
           </div>
         </Modal>
 
-        <Modal is_open={feedback.isOpen} on_close={close_feedback} title={feedback.title}>
+        {/* Modal: Feedback */}
+        <Modal is_open={feedback.is_open} on_close={handle_close_feedback} title={feedback.title}>
           <div className={`feedback-content feedback-${feedback.type}`}>
-            <div className="feedback-icon" style={{ fontSize: '3rem', textAlign: 'center', marginBottom: '1rem' }}>
+            <div className="feedback-icon-lg">
               {feedback.type === 'success' && '✅'}
               {feedback.type === 'warning' && '⚠️'}
               {feedback.type === 'error' && '❌'}
             </div>
-            <p className="feedback-message" style={{ textAlign: 'center', whiteSpace: 'pre-wrap' }}>
-              {feedback.message}
-            </p>
-            <div className="text-center mt-2" style={{ textAlign: 'center' }}>
-              <button className="btn-primary" onClick={close_feedback} autoFocus>
+            <p className="feedback-msg-center">{feedback.message}</p>
+            <div className="feedback-actions">
+              <button className="btn-primary" onClick={handle_close_feedback} autoFocus>
                 Entendido
               </button>
             </div>

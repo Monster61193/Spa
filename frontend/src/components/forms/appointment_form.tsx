@@ -8,12 +8,9 @@ import { useServices } from '../../hooks/use_services';
 import { useClients } from '../../hooks/use_clients';
 import { api_client } from '../../api/api_client';
 
-// Importamos los estilos aislados
 import './appointment_form.css';
 
-/**
- * Esquema de validación para Múltiples Servicios.
- */
+// --- ESQUEMA DE VALIDACIÓN ---
 const AppointmentSchema = z.object({
   cliente_id: z.string().min(1, 'Debes seleccionar un cliente.'),
   servicios_ids: z.array(z.string()).min(1, 'Debes agregar al menos un servicio a la cita.'),
@@ -22,11 +19,21 @@ const AppointmentSchema = z.object({
 
 type AppointmentFormValues = z.infer<typeof AppointmentSchema>;
 
+// --- DEFINICIÓN DE PROPS ---
+type Props = {
+  /**
+   * Callback que se ejecuta cuando la cita se crea exitosamente en el backend.
+   * Permite al componente padre manejar el cierre del modal y el feedback.
+   */
+  onSuccess?: () => void;
+};
+
 /**
- * Formulario transaccional para agendar citas con múltiples servicios (Carrito).
- * Refactorizado para usar clases CSS en lugar de estilos inline.
+ * Formulario transaccional para agendar citas (Carrito de Servicios).
+ *
+ * @param {Props} props - Props del componente.
  */
-export const AppointmentForm = () => {
+export const AppointmentForm = ({ onSuccess }: Props) => {
   const { user } = useAuth();
   const { activeBranch } = useBranch();
 
@@ -34,8 +41,10 @@ export const AppointmentForm = () => {
   const { data: services = [], isLoading: isLoadingServices } = useServices();
   const { data: clients = [], isLoading: isLoadingClients } = useClients();
 
-  // Estado local para el selector temporal
+  // Estado local
   const [selectedServiceId, setSelectedServiceId] = useState<string>('');
+  // Estado para errores de API que no son de validación de campos
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const {
     register,
@@ -65,18 +74,17 @@ export const AppointmentForm = () => {
     return sum + (service?.duracionMinutos || 0);
   }, 0);
 
-  // Fecha mínima
+  // Fecha mínima (hoy)
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
   const min_datetime = now.toISOString().slice(0, 16);
 
-  // Handlers de UI
+  // --- HANDLERS ---
+
   const handleAddService = () => {
     if (!selectedServiceId) return;
-    if (addedServiceIds.includes(selectedServiceId)) {
-      alert('Este servicio ya ha sido agregado.');
-      return;
-    }
+    if (addedServiceIds.includes(selectedServiceId)) return;
+
     const newIds = [...addedServiceIds, selectedServiceId];
     setValue('servicios_ids', newIds, { shouldValidate: true });
     setSelectedServiceId('');
@@ -87,8 +95,13 @@ export const AppointmentForm = () => {
     setValue('servicios_ids', newIds, { shouldValidate: true });
   };
 
+  /**
+   * Envío del formulario.
+   * En lugar de alert(), delega el éxito al padre mediante onSuccess().
+   */
   const onSubmit: SubmitHandler<AppointmentFormValues> = async (data) => {
     if (!user || !activeBranch) return;
+    setApiError(null);
 
     const payload = {
       usuario_id: data.cliente_id,
@@ -98,11 +111,16 @@ export const AppointmentForm = () => {
 
     try {
       await api_client.post('/appointments', payload);
-      alert('¡Cita agendada con éxito!');
-      window.location.reload();
-    } catch (error) {
+
+      // Notificamos al padre que todo salió bien
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (error: any) {
       console.error('Error al agendar cita:', error);
-      alert('Ocurrió un error al intentar agendar. Verifica el stock.');
+      // Mostramos el error dentro del formulario (UX no intrusiva)
+      const msg = error.response?.data?.message || 'Ocurrió un error al guardar.';
+      setApiError(msg);
     }
   };
 
@@ -112,6 +130,22 @@ export const AppointmentForm = () => {
   return (
     <div className="appointment-form-container">
       <h3 className="form-title">Nueva Cita (Carrito)</h3>
+
+      {/* Mensaje de error de API */}
+      {apiError && (
+        <div
+          style={{
+            padding: '0.8rem',
+            marginBottom: '1rem',
+            background: '#fee2e2',
+            color: '#dc2626',
+            borderRadius: '6px',
+            fontSize: '0.9rem',
+          }}
+        >
+          {apiError}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="appointment-form">
         {/* 1. Selección de Cliente */}
@@ -130,12 +164,11 @@ export const AppointmentForm = () => {
           {errors.cliente_id && <span className="error-message">{errors.cliente_id.message}</span>}
         </div>
 
-        {/* 2. Selección de Servicios (Carrito) */}
+        {/* 2. Carrito de Servicios */}
         <div className="service-cart">
           <label htmlFor="service_selector" className="form-label">
             Agregar Servicios
           </label>
-
           <div className="cart-controls">
             <select
               id="service_selector"
@@ -147,7 +180,7 @@ export const AppointmentForm = () => {
               <option value="">-- Elegir servicio --</option>
               {services.map((s) => (
                 <option key={s.id} value={s.id} disabled={addedServiceIds.includes(s.id)}>
-                  {s.nombre} (${s.precioBase}) - {s.duracionMinutos} min
+                  {s.nombre} (${s.precioBase})
                 </option>
               ))}
             </select>
@@ -156,13 +189,11 @@ export const AppointmentForm = () => {
               onClick={handleAddService}
               disabled={!selectedServiceId || isSubmitting}
               className="btn-add"
-              title="Agregar servicio a la lista"
             >
               +
             </button>
           </div>
 
-          {/* Lista de Servicios Agregados */}
           {addedServiceIds.length > 0 && (
             <ul className="cart-list">
               {addedServiceIds.map((id) => {
@@ -172,12 +203,7 @@ export const AppointmentForm = () => {
                     <span>{s?.nombre}</span>
                     <div className="cart-item-details">
                       <span className="cart-item-price">${s?.precioBase}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveService(id)}
-                        className="btn-remove"
-                        aria-label="Quitar servicio"
-                      >
+                      <button type="button" onClick={() => handleRemoveService(id)} className="btn-remove">
                         ✕
                       </button>
                     </div>
@@ -187,7 +213,6 @@ export const AppointmentForm = () => {
             </ul>
           )}
 
-          {/* Resumen de Totales */}
           <div className="cart-summary">
             <div>
               Duración: <strong>{duracionTotal} min</strong>
@@ -196,11 +221,10 @@ export const AppointmentForm = () => {
               Total: <strong>${totalEstimado}</strong>
             </div>
           </div>
-
           {errors.servicios_ids && <span className="error-message">{errors.servicios_ids.message}</span>}
         </div>
 
-        {/* 3. Fecha y Hora */}
+        {/* 3. Fecha */}
         <div className="form-group">
           <label htmlFor="fecha_hora" className="form-label">
             Fecha y Hora
