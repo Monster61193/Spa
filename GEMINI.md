@@ -152,3 +152,51 @@ This document serves as a central place for me (Gemini) to track my understandin
 
 - **Performance:** Monitor `AppointmentsService.listar` query time (Add pagination in Sprint 3).
 - **Security:** Ensure `BranchGuard` is applied to new Catalog endpoints.
+
+## contexto actualizado
+
+# Gemini's Project Context for Danae Spa
+
+## 1. Project Status: SPRINT 2.5 COMPLETED ✅
+
+- **Current Phase:** Transitioning to **Sprint 3: Finance & Promotions**.
+- **Achievement:** The system is now autonomous. Admins can manage Services and Inventory directly from the UI without relying on database seeds.
+- **Backend:** Full CRUD capabilities for Services and Inventory implemented with transactional integrity.
+- **Frontend:** Dedicated Management Modals integrated into the Dashboard.
+- **Quality:** 100% Pass rate on Unit Tests (Backend) and Integration Tests (Frontend).
+
+## 2. Architecture & Rules (Ref: AGENTS.md)
+
+- **Testing Standard:** Backend services mock `Prisma.$transaction`. Frontend tests use `renderWithClient` and mock custom hooks to avoid context leakage.
+- **Accessibility (a11y):** Strict `htmlFor` + `id` binding in forms and `title` attributes on icon buttons required for passing tests.
+- **UX Pattern:** No native alerts. All feedback uses the unified `FeedbackState` modal in `App.tsx`.
+
+## 3. Roadmap Progress
+
+### ✅ SPRINT 2: OPERATIONAL CONTROL (Completed)
+
+- [x] Appointment Lifecycle (Create, Edit, Cancel, Close).
+- [x] "Smart Editing" with pre-filled data.
+
+### ✅ SPRINT 2.5: CATALOG MANAGEMENT (Completed)
+
+- [x] **Backend:** `POST /services`, `PATCH /services/:id` (with Zod validation).
+- [x] **Backend:** `POST /inventory` (Create), `POST /inventory/:id/restock` (Atomic Increment).
+- [x] **Frontend:** `ServicesManagerModal` (List/Form view toggle).
+- [x] **Frontend:** `InventoryActionModal` (Polymorphic: Create vs Restock).
+- [x] **QA:** Unit Tests for Services/Inventory Services & Integration Tests for Modals.
+
+### 🚀 SPRINT 3: FINANCE & PROMOTIONS (Next Up)
+
+**Objective:** Handle money flow (Advance payments) and drive sales (Promotions).
+
+- [ ] **DB:** Add `anticipo` (Decimal) to `Cita` table.
+- [ ] **Backend:** Implement `PromotionsService` logic (Validation by date, branch, and active status).
+- [ ] **Frontend:** Add "Anticipo" field in `AppointmentForm`.
+- [ ] **Frontend:** Display active promotions in the Dashboard.
+- [ ] **Backend:** Calculate Commissions upon closing an appointment.
+
+## 4. Technical Debt / Watchlist
+
+- **Performance:** Monitor `AppointmentsService.listar` as history grows (Pagination needed in Sprint 4).
+- **Refactor:** `App.tsx` is getting large. Consider extracting `DashboardLayout` component in the future.
