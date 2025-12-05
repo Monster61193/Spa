@@ -88,3 +88,67 @@ This document serves as a central place for me (Gemini) to track my understandin
 
 - **Performance:** Monitor `AppointmentsService.listar` query time as history grows (consider pagination).
 - **Inventory:** Currently, stock validation blocks the sale (Strict Mode). Discuss "Negative Stock" override for Admins.
+
+### Contexto actualizado
+
+# Gemini's Project Context for Danae Spa
+
+## 1. Project Status: SPRINT 2 COMPLETED ✅
+
+- **Current Phase:** Entering **Sprint 2.5: Catalog Management (Services & Inventory)**.
+- **Strategic Pivot:** Prioritizing CRUD capabilities (Create/Read/Update/Delete) for Services and Inventory before Finance. This ensures the system is autonomous and doesn't rely on database seeding.
+- **Recent Achievements:**
+  - Full Appointment Lifecycle (Create -> Edit -> Cancel -> Close).
+  - Robust Frontend Architecture (IoC Pattern, Centralized CSS, Smart Modals).
+  - 100% Integration Test Coverage for critical flows.
+
+## 2. Architecture & Rules (Ref: AGENTS.md)
+
+- **Frontend Pattern:** "Smart Components" (Logic) vs "Presentational Components" (UI).
+- **Styling:** No inline styles. Use `App.css` or component-specific CSS files.
+- **State Management:** `React Query` handles server state; `Context API` handles global app state (Auth, Branch, Theme).
+- **Testing:** Vitest + Testing Library required for new features.
+
+## 3. Roadmap Progress
+
+### ✅ SPRINT 1: FLEXIBILITY (Multi-Service)
+
+- [x] **DB:** Refactor `schema.prisma` (Explicit M:N relation `CitaServicio`).
+- [x] **Frontend:** Service Cart model.
+
+### ✅ SPRINT 2: OPERATIONAL CONTROL (Completed)
+
+- [x] **UI:** "Appointment Details" Modal with Read/Edit modes.
+- [x] **Backend:** `PATCH /appointments/:id/items` & `POST /appointments/:id/cancel`.
+- [x] **Frontend:** "Smart Editing" (Pre-fill services logic).
+- [x] **Frontend:** Cancellation flow with reason validation.
+- [x] **Refactor:** Replaced native alerts with Modals and consolidated CSS.
+- [x] **QA:** Integration tests for Edit, Cancel, and Close flows.
+
+### 🚀 SPRINT 2.5: CATALOG MANAGEMENT (Current Focus)
+
+**Objective:** Allow Admins to create and manage Services and Inventory via UI.
+
+**Backend:**
+
+- [ ] **Services:** Implement `POST /services` (Create) and `PATCH /services/:id` (Update prices/duration).
+- [ ] **Inventory:** Implement `POST /inventory` (New Material) and `PATCH /inventory/:id` (Adjust Stock/Restock).
+
+**Frontend:**
+
+- [ ] **Inventory:** Add "+ Nuevo Material" button and "Editar/Ajustar Stock" modal in `InventoryTable`.
+- [ ] **Services:** Create a new "Catálogo de Servicios" view/modal to list and add services.
+
+### 🔮 SPRINT 3: FINANCE & PROMOTIONS (On Deck)
+
+**Objective:** Handle money correctly (Advance payments) and drive sales.
+
+- [ ] **DB:** Add `anticipo` logic.
+- [ ] **Backend:** Validate `Promociones` logic.
+- [ ] **Frontend:** Add "Anticipo" field in AppointmentForm.
+- [ ] **Frontend:** Show active promotions in Dashboard.
+
+## 4. Technical Debt / Watchlist
+
+- **Performance:** Monitor `AppointmentsService.listar` query time (Add pagination in Sprint 3).
+- **Security:** Ensure `BranchGuard` is applied to new Catalog endpoints.

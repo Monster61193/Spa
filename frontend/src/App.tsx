@@ -6,6 +6,9 @@ import { BranchSelector } from './components/branch_selector/branch_selector';
 import { InventoryTable } from './components/inventory/inventory_table';
 import { AppointmentForm } from './components/forms/appointment_form';
 import { AppointmentDetailsModal } from './components/forms/appointment_details_modal';
+// Nuevos componentes del Sprint 2.5 (Catálogos e Inventario)
+import { ServicesManagerModal } from './components/services/services_manager_modal';
+import { InventoryActionModal } from './components/inventory/inventory_action_modal';
 
 // --- COMPONENTES UI / LAYOUT ---
 import { Modal } from './components/ui/modal';
@@ -14,7 +17,7 @@ import { LoginPage } from './pages/login_page';
 
 // --- HOOKS Y CONTEXTOS (Capa de Aplicación) ---
 import { useAppointments } from './hooks/use_appointments';
-import { use_inventory } from './hooks/use_inventory';
+import { use_inventory, InventoryItem } from './hooks/use_inventory'; // Importamos InventoryItem
 import { useBranch } from './contexts/branch.context';
 import { useAuth } from './contexts/auth.context';
 
@@ -59,6 +62,18 @@ export const App = () => {
   const [is_form_modal_open, set_is_form_modal_open] = useState(false);
   const [selected_appointment, set_selected_appointment] = useState<any | null>(null);
   const [processing_ids, set_processing_ids] = useState<string[]>([]);
+  const [is_services_modal_open, set_is_services_modal_open] = useState(false);
+
+  // Nuevo estado para el modal de Inventario (Crear/Restock)
+  const [inventory_modal, set_inventory_modal] = useState<{
+    is_open: boolean;
+    mode: 'create' | 'restock';
+    target_item: InventoryItem | null;
+  }>({
+    is_open: false,
+    mode: 'create',
+    target_item: null,
+  });
 
   // Estados Modales Auxiliares
   const [feedback, set_feedback] = useState<FeedbackState>({
@@ -98,6 +113,20 @@ export const App = () => {
       type: 'success',
     });
     refetch_appointments(); // Actualización "live"
+  };
+
+  // --- HANDLERS INVENTARIO (Sprint 2.5) ---
+
+  const open_create_material = () => {
+    set_inventory_modal({ is_open: true, mode: 'create', target_item: null });
+  };
+
+  const open_restock_material = (item: InventoryItem) => {
+    set_inventory_modal({ is_open: true, mode: 'restock', target_item: item });
+  };
+
+  const close_inventory_modal = () => {
+    set_inventory_modal((prev) => ({ ...prev, is_open: false }));
   };
 
   /**
@@ -178,9 +207,23 @@ export const App = () => {
         <section className="panel">
           <div className="panel-header">
             <h2>Agenda del Día</h2>
-            <button className="btn-primary" onClick={() => set_is_form_modal_open(true)}>
-              + Nueva Cita
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {/* Botón Gestión de Catálogo (Sprint 2.5) */}
+              <button
+                className="btn-secondary-action"
+                onClick={() => set_is_services_modal_open(true)}
+                title="Gestionar catálogo de servicios"
+              >
+                ⚙️ Servicios
+              </button>
+              <button
+                className="btn-primary"
+                onClick={() => set_is_form_modal_open(true)}
+                aria-label="Crear nueva cita"
+              >
+                + Nueva Cita
+              </button>
+            </div>
           </div>
 
           {is_loading_appointments ? (
@@ -247,22 +290,44 @@ export const App = () => {
         <section className="panel">
           <div className="panel-header">
             <h2>📦 Inventario en Tiempo Real</h2>
+            <button
+              className="btn-secondary-action" // Botón para crear nuevo material
+              onClick={open_create_material}
+              title="Registrar nuevo material"
+            >
+              + Nuevo Material
+            </button>
           </div>
-          <InventoryTable data={inventory_data} loading={is_loading_inventory} />
+          <InventoryTable
+            data={inventory_data}
+            loading={is_loading_inventory}
+            onRestock={open_restock_material} // Pasamos el handler de restock
+          />
         </section>
 
         {/* --- MODALES --- */}
 
-        {/* Modal: Crear Cita (Conectado al nuevo Handler) */}
+        {/* Modal: Crear Cita */}
         <Modal is_open={is_form_modal_open} on_close={() => set_is_form_modal_open(false)}>
           <AppointmentForm onSuccess={handle_appointment_created} />
         </Modal>
 
-        {/* Modal: Detalles */}
+        {/* Modal: Detalles (Lectura, Edición, Cancelación) */}
         <AppointmentDetailsModal
           isOpen={!!selected_appointment}
           onClose={() => set_selected_appointment(null)}
           appointment={selected_appointment}
+        />
+
+        {/* Modal: Gestor de Servicios (Sprint 2.5) */}
+        <ServicesManagerModal is_open={is_services_modal_open} on_close={() => set_is_services_modal_open(false)} />
+
+        {/* Modal: Acciones de Inventario (Sprint 2.5) */}
+        <InventoryActionModal
+          is_open={inventory_modal.is_open}
+          on_close={close_inventory_modal}
+          mode={inventory_modal.mode}
+          target_item={inventory_modal.target_item}
         />
 
         {/* Modal: Confirmación Cierre */}

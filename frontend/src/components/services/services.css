@@ -1,0 +1,144 @@
+/* 1. Override para hacer ESTE modal más ancho que el estándar */
+/* Nota: Usamos !important o especificidad para ganar a App.css si es necesario, 
+   pero lo ideal es aplicar una clase al contenedor del modal. 
+   Por ahora, aplicaremos estilo inline al contenedor o una clase contenedora. */
+
+.services-manager-modal {
+  width: 95%;
+  max-width: 800px; /* Aumentado de 600px a 800px */
+}
+
+/* --- Layout del Manager --- */
+.services-manager-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  /* Margen derecho de seguridad para que el botón "Crear" no toque la "X" */
+  padding-right: 3rem;
+}
+
+.services-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.4rem;
+}
+
+/* --- Lista de Servicios --- */
+.services-list-container {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.service-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.8rem;
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 0.8rem;
+  transition: background-color 0.2s;
+}
+
+.service-row:hover {
+  background-color: var(--bg-body);
+}
+
+.service-info h4 {
+  margin: 0 0 0.2rem 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.service-meta {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  display: flex;
+  gap: 1rem;
+}
+
+/* --- Formulario --- */
+.service-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  background-color: var(--bg-body);
+  padding: 1.5rem;
+  border-radius: 8px;
+}
+
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+/* --- Botones --- */
+.btn-icon {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.btn-icon:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  background-color: white;
+}
+
+.btn-create {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+/* --- Estilos para la sección de Receta (Materiales) --- */
+.recipe-section {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  padding: 1rem;
+  border-radius: 8px;
+  margin-top: 1rem;
+}
+
+.recipe-controls {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto; /* Material - Cantidad - Botón */
+  gap: 0.8rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.recipe-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 1px dashed var(--border-color);
+}
+
+.recipe-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.9rem;
+}
+
+.recipe-item:last-child {
+  border-bottom: none;
+}

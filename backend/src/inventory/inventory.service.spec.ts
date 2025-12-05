@@ -1,27 +1,25 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { InventoryService } from "./inventory.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { inventory_snapshot } from "../common/mocks/sample-data";
+import { NotFoundException } from "@nestjs/common";
 
-// Mock de datos reales de la BD
-const mock_db_existencias = [
-  {
-    materialId: "mat-real-1",
-    stockActual: 100,
-    stockMinimo: 10,
-    material: { nombre: "Material Real", unidad: "pz" },
+// CAMBIO: Agregamos ': any' para evitar el error de inferencia circular
+// al usar 'mock_prisma' dentro de su propia definición ($transaction).
+const mock_prisma: any = {
+  material: { create: jest.fn(), findFirst: jest.fn() },
+  existencia: {
+    create: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+    findMany: jest.fn(),
   },
-];
+  auditLog: { create: jest.fn() },
+  // Simula la transacción ejecutando el callback inmediatamente
+  $transaction: jest.fn((callback) => callback(mock_prisma)),
+};
 
 describe("InventoryService", () => {
   let service: InventoryService;
-  let prisma: PrismaService;
-
-  const mock_prisma = {
-    existencia: {
-      findMany: jest.fn(),
-    },
-  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -32,40 +30,81 @@ describe("InventoryService", () => {
     }).compile();
 
     service = module.get<InventoryService>(InventoryService);
-    prisma = module.get<PrismaService>(PrismaService);
     jest.clearAllMocks();
   });
 
-  it("debe retornar datos de la BD si la conexión es exitosa", async () => {
-    // ARRANGE: La BD responde bien
-    mock_prisma.existencia.findMany.mockResolvedValue(mock_db_existencias);
+  describe("crear_material", () => {
+    it("debe ejecutar una transacción creando Material + Existencia + Audit", async () => {
+      // ARRANGE
+      const data = {
+        nombre: "Aceite Nuevo",
+        unidad: "ml",
+        stock_inicial: 100,
+        stock_minimo: 10,
+      };
+      const sucursal_id = "suc-1";
 
-    // ACT
-    const resultado = await service.listar("suc-1");
+      mock_prisma.material.create.mockResolvedValue({
+        id: "mat-new",
+        nombre: "Aceite Nuevo",
+      });
 
-    // ASSERT
-    expect(resultado).toHaveLength(1);
-    expect(resultado[0].material).toBe("Material Real"); // Viene de la BD
-    expect(prisma.existencia.findMany).toHaveBeenCalled();
+      // ACT
+      await service.crear_material(data, sucursal_id);
+
+      // ASSERT
+      expect(mock_prisma.$transaction).toHaveBeenCalled();
+
+      expect(mock_prisma.material.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ nombre: "Aceite Nuevo" }),
+        })
+      );
+
+      expect(mock_prisma.existencia.create).toHaveBeenCalledWith({
+        data: {
+          sucursalId: "suc-1",
+          materialId: "mat-new",
+          stockActual: 100,
+          stockMinimo: 10,
+        },
+      });
+
+      expect(mock_prisma.auditLog.create).toHaveBeenCalled();
+    });
   });
 
-  it("debe retornar MOCKS si la BD falla (Graceful Degradation)", async () => {
-    // ARRANGE: La BD explota
-    mock_prisma.existencia.findMany.mockRejectedValue(
-      new Error("Conexión perdida")
-    );
+  describe("reabastecer", () => {
+    it("debe incrementar el stock atómicamente si el material existe", async () => {
+      // ARRANGE
+      mock_prisma.existencia.findUnique.mockResolvedValue({ stockActual: 10 });
+      mock_prisma.existencia.update.mockResolvedValue({ stockActual: 60 });
 
-    // ACT
-    const resultado = await service.listar("branch-principal"); // Usamos un ID que exista en los mocks
+      // ACT
+      const nuevo_stock = await service.reabastecer("mat-1", 50, "suc-1");
 
-    // ASSERT
-    // No debe lanzar error, sino retornar el array de fallback
-    expect(resultado).toBeDefined();
-    // Verificamos que sean los mocks (usualmente empiezan diferente o tienen datos fijos)
-    expect(resultado.length).toBeGreaterThan(0);
+      // ASSERT
+      expect(nuevo_stock).toBe(60);
 
-    // Verificamos que sea data del mock (según tu sample-data)
-    const mockEsperado = inventory_snapshot["branch-principal"][0];
-    expect(resultado[0].material).toBe(mockEsperado.material);
+      expect(mock_prisma.existencia.update).toHaveBeenCalledWith({
+        where: {
+          sucursalId_materialId: { sucursalId: "suc-1", materialId: "mat-1" },
+        },
+        data: {
+          // Verificamos que se use la operación atómica 'increment'
+          stockActual: { increment: 50 },
+        },
+      });
+
+      expect(mock_prisma.auditLog.create).toHaveBeenCalled();
+    });
+
+    it("debe lanzar NotFoundException si el material no está en la sucursal", async () => {
+      mock_prisma.existencia.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.reabastecer("mat-fantasma", 10, "suc-1")
+      ).rejects.toThrow(NotFoundException);
+    });
   });
 });

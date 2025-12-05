@@ -26,13 +26,15 @@ const mockData: InventoryItem[] = [
 describe('InventoryTable Component', () => {
   it('Muestra mensaje de carga cuando loading es true', () => {
     render(<InventoryTable data={[]} loading={true} />);
-    expect(screen.getByText(/Actualizando inventario/i)).toBeInTheDocument();
+    // ACTUALIZADO: El texto real tiene un emoji y puntos suspensivos
+    expect(screen.getByText(/Cargando inventario.../i)).toBeInTheDocument();
   });
 
   it('Muestra mensaje de vacío cuando no hay datos', () => {
     render(<InventoryTable data={[]} loading={false} />);
     expect(screen.getByText(/Sin existencias/i)).toBeInTheDocument();
-    expect(screen.getByText(/No se encontraron materiales/i)).toBeInTheDocument();
+    // ACTUALIZADO: El texto real es diferente
+    expect(screen.getByText(/Registra materiales para comenzar/i)).toBeInTheDocument();
   });
 
   it('Renderiza la tabla con datos correctamente', () => {

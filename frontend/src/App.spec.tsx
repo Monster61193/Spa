@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App from './App';
 import { api_client } from './api/api_client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 /**
  * =============================================================================
@@ -62,6 +63,20 @@ vi.mock('./hooks/use_inventory', () => ({
   }),
 }));
 
+vi.mock('./hooks/use_services', () => ({
+  useServices: () => ({
+    data: [],
+    isLoading: false,
+  }),
+}));
+
+vi.mock('./hooks/use_mutate_inventory', () => ({
+  useMutateInventory: () => ({
+    create_material: { mutate: vi.fn() },
+    restock_material: { mutate: vi.fn() },
+  }),
+}));
+
 // 5. Mocks de Componentes Hijos (para aislar App.tsx)
 vi.mock('./components/forms/appointment_details_modal', () => ({
   AppointmentDetailsModal: () => <div data-testid="mock-details-modal" />,
@@ -80,6 +95,15 @@ vi.mock('./components/layout/header', () => ({
  * SUITE DE PRUEBAS DE INTEGRACIÓN
  * =============================================================================
  */
+
+// Función helper para envolver el componente
+const renderWithClient = (component: React.ReactNode) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(<QueryClientProvider client={queryClient}>{component}</QueryClientProvider>);
+};
+
 describe('App Component - Flujos Críticos', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -87,7 +111,7 @@ describe('App Component - Flujos Críticos', () => {
 
   // Test existente (Apertura de detalles)
   it('abre el modal de detalles al hacer clic en "Detalle"', async () => {
-    render(<App />);
+    renderWithClient(<App />);
     const btnDetalle = screen.getByText(/Detalle/i);
     fireEvent.click(btnDetalle);
     expect(await screen.findByTestId('mock-details-modal')).toBeInTheDocument();
@@ -100,7 +124,7 @@ describe('App Component - Flujos Críticos', () => {
       data: { mensaje: 'Venta procesada con éxito' },
     });
 
-    render(<App />);
+    renderWithClient(<App />);
 
     // 1. Identificar cita pendiente y hacer clic en "Cerrar"
     // Nota: El botón puede tener texto "Cerrar" o "..." si estuviera cargando, buscamos por texto inicial
