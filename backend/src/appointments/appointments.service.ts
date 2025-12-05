@@ -63,12 +63,18 @@ export class AppointmentsService {
   }
 
   /**
-   * Crea una nueva cita.
+   * Crea una nueva cita con asignación de empleado opcional.
    */
   async agendar(
-    data: { usuario_id: string; servicios_ids: string[]; fecha_hora: string },
+    data: {
+      usuario_id: string;
+      servicios_ids: string[];
+      fecha_hora: string;
+      empleado_id?: string; // Nuevo parámetro opcional
+    },
     sucursal_id: string
   ) {
+    // 1. Validar servicios (Lógica existente)
     const servicios_encontrados = await this.prisma.servicio.findMany({
       where: { id: { in: data.servicios_ids }, activo: true },
     });
@@ -79,15 +85,38 @@ export class AppointmentsService {
       );
     }
 
+    // 2. Validar Empleado (Nueva lógica de seguridad)
+    // Si se envía empleado_id, verificar que pertenezca a la sucursal para evitar
+    // asignar citas a empleados de otra sede.
+    if (data.empleado_id) {
+      const empleado_valido = await this.prisma.empleadoSucursal.findUnique({
+        where: {
+          empleadoId_sucursalId: {
+            empleadoId: data.empleado_id,
+            sucursalId: sucursal_id,
+          },
+        },
+      });
+
+      if (!empleado_valido) {
+        throw new BadRequestException(
+          "El empleado seleccionado no pertenece a esta sucursal."
+        );
+      }
+    }
+
     const total_calculado = servicios_encontrados.reduce(
       (suma, servicio) => suma + Number(servicio.precioBase),
       0
     );
 
+    // 3. Crear Cita
     return this.prisma.cita.create({
       data: {
         sucursalId: sucursal_id,
         usuarioId: data.usuario_id,
+        // Vinculamos el empleado si existe
+        empleadoId: data.empleado_id,
         fechaHora: new Date(data.fecha_hora),
         estado: CitaEstado.pendiente,
         total: total_calculado,

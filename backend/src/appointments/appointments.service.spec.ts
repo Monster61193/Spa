@@ -32,13 +32,19 @@ describe("AppointmentsService", () => {
   let prisma: PrismaService;
 
   const mock_prisma: any = {
-    cita: { findUnique: jest.fn(), update: jest.fn() },
+    cita: { findUnique: jest.fn(), update: jest.fn(), create: jest.fn() },
     servicio: { findMany: jest.fn() },
     citaServicio: { deleteMany: jest.fn() },
-    $transaction: jest.fn((cb) => cb(mock_prisma)), // Auto-ejecutar transacción
+    //Mock para validar la relación empleado-sucursal
+    empleadoSucursal: { findUnique: jest.fn() },
+    $transaction: jest.fn(async (cb: any) => await cb(mock_prisma)), // Auto-ejecutar transacción async
   };
 
   beforeEach(async () => {
+    jest.resetAllMocks(); // Limpieza vital
+    // Restaurar la implementación de $transaction después del reset
+    mock_prisma.$transaction.mockImplementation(async (cb: any) => await cb(mock_prisma));
+    
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AppointmentsService,
@@ -47,8 +53,6 @@ describe("AppointmentsService", () => {
     }).compile();
 
     service = module.get<AppointmentsService>(AppointmentsService);
-    prisma = module.get<PrismaService>(PrismaService);
-    jest.clearAllMocks();
   });
 
   describe("actualizar_items (Sprint 2)", () => {
@@ -56,6 +60,7 @@ describe("AppointmentsService", () => {
       // ARRANGE
       mock_prisma.cita.findUnique.mockResolvedValue(mock_cita_pendiente);
       mock_prisma.servicio.findMany.mockResolvedValue(mock_servicios_nuevos);
+      mock_prisma.citaServicio.deleteMany.mockResolvedValue({ count: 0 });
 
       // Simulamos respuesta del update final
       mock_prisma.cita.update.mockResolvedValue({
@@ -112,6 +117,75 @@ describe("AppointmentsService", () => {
       await expect(
         service.actualizar_items("cita-p-1", ["srv-1"], "suc-2")
       ).rejects.toThrow(BadRequestException); // Error 400
+    });
+  });
+
+  describe("agendar (Sprint 3 - Asignación)", () => {
+    const payload_base = {
+      usuario_id: "user-1",
+      servicios_ids: ["srv-1"],
+      fecha_hora: "2025-10-25T10:00:00Z",
+    };
+
+    it("debe permitir agendar con un empleado válido de la sucursal", async () => {
+      // ARRANGE
+      const sucursal_id = "suc-1";
+      const empleado_id = "emp-1";
+
+      // 1. Simulamos que el servicio existe
+      mock_prisma.servicio.findMany.mockResolvedValue([
+        { id: "srv-1", precioBase: 100 },
+      ]);
+
+      // 2. Simulamos que el empleado SÍ pertenece a la sucursal
+      mock_prisma.empleadoSucursal.findUnique.mockResolvedValue({
+        empleadoId: empleado_id,
+      });
+
+      // 3. Simulamos creación exitosa
+      mock_prisma.cita.create.mockResolvedValue({ id: "cita-new" });
+
+      // ACT
+      await service.agendar({ ...payload_base, empleado_id }, sucursal_id);
+
+      // ASSERT
+      // Verificamos que se validó la pertenencia del empleado
+      expect(mock_prisma.empleadoSucursal.findUnique).toHaveBeenCalledWith({
+        where: {
+          empleadoId_sucursalId: {
+            empleadoId: empleado_id,
+            sucursalId: sucursal_id,
+          },
+        },
+      });
+
+      // Verificamos que se guardó el empleadoId en la cita
+      expect(mock_prisma.cita.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            empleadoId: empleado_id, // <--- Dato crítico
+          }),
+        })
+      );
+    });
+
+    it("debe lanzar BadRequest si el empleado no pertenece a la sucursal", async () => {
+      // ARRANGE
+      mock_prisma.servicio.findMany.mockResolvedValue([{ id: "srv-1" }]);
+
+      // Simulamos que NO existe la relación (null)
+      mock_prisma.empleadoSucursal.findUnique.mockResolvedValue(null);
+
+      // ACT & ASSERT
+      await expect(
+        service.agendar(
+          { ...payload_base, empleado_id: "emp-de-otra-sucursal" },
+          "suc-1"
+        )
+      ).rejects.toThrow(BadRequestException);
+
+      // Aseguramos que NO se creó la cita
+      expect(mock_prisma.cita.create).not.toHaveBeenCalled();
     });
   });
 });

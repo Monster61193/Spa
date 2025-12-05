@@ -4,10 +4,14 @@ import { AppointmentsService } from "./appointments.service";
 import { z } from "zod";
 
 /**
- * Esquema de Validación (DTO) para agendar citas.
+ * Esquema de Validación (DTO) actualizado para incluir empleado.
+ * Hacemos que el empleado sea opcional al agendar (puede asignarse después),
+ * pero recomendado.
  */
 const AgendarSchema = z.object({
   usuario_id: z.string().min(1, "El ID del usuario es obligatorio"),
+  // Nuevo campo validado: UUID del empleado (tabla empleados, no usuarios)
+  empleado_id: z.string().uuid("ID de empleado inválido").optional(),
   servicios_ids: z
     .array(z.string().min(1))
     .min(1, "Debes seleccionar al menos un servicio"),

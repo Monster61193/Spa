@@ -6,13 +6,19 @@ import { useAuth } from '../../contexts/auth.context';
 import { useBranch } from '../../contexts/branch.context';
 import { useServices } from '../../hooks/use_services';
 import { useClients } from '../../hooks/use_clients';
+import { useEmployees } from '../../hooks/use_employees';
 import { api_client } from '../../api/api_client';
 
 import './appointment_form.css';
 
-// --- ESQUEMA DE VALIDACIÓN ---
+/**
+ * Esquema de validación para la creación de citas.
+ * Actualizado para Sprint 3: Incluye `empleado_id` opcional.
+ */
 const AppointmentSchema = z.object({
   cliente_id: z.string().min(1, 'Debes seleccionar un cliente.'),
+  // El empleado es opcional al crear, pero vital para calcular comisiones al cerrar.
+  empleado_id: z.string().optional(),
   servicios_ids: z.array(z.string()).min(1, 'Debes agregar al menos un servicio a la cita.'),
   fecha_hora: z.string().min(1, 'La fecha y hora son obligatorias.'),
 });
@@ -29,7 +35,12 @@ type Props = {
 };
 
 /**
- * Formulario transaccional para agendar citas (Carrito de Servicios).
+ * Formulario transaccional para agendar citas.
+ *
+ * Funcionalidades Clave:
+ * 1. Selección de Cliente.
+ * 2. Asignación de Empleado (Sprint 3 - Comisiones).
+ * 3. Carrito de Servicios (Cálculo de totales en tiempo real).
  *
  * @param {Props} props - Props del componente.
  */
@@ -37,14 +48,15 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
   const { user } = useAuth();
   const { activeBranch } = useBranch();
 
-  // Hooks de datos
-  const { data: services = [], isLoading: isLoadingServices } = useServices();
-  const { data: clients = [], isLoading: isLoadingClients } = useClients();
+  // --- HOOKS DE DATOS ---
+  const { data: services = [], isLoading: is_loading_services } = useServices();
+  const { data: clients = [], isLoading: is_loading_clients } = useClients();
+  // Consumimos empleados filtrados por la sucursal activa
+  const { data: employees = [], isLoading: is_loading_employees } = useEmployees();
 
-  // Estado local
-  const [selectedServiceId, setSelectedServiceId] = useState<string>('');
-  // Estado para errores de API que no son de validación de campos
-  const [apiError, setApiError] = useState<string | null>(null);
+  // --- ESTADO LOCAL ---
+  const [selected_service_id, set_selected_service_id] = useState<string>('');
+  const [api_error, set_api_error] = useState<string | null>(null);
 
   const {
     register,
@@ -56,55 +68,58 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
     resolver: zodResolver(AppointmentSchema),
     defaultValues: {
       cliente_id: '',
+      empleado_id: '', // Valor inicial vacío
       servicios_ids: [],
       fecha_hora: '',
     },
   });
 
-  // Cálculos en tiempo real
-  const addedServiceIds = watch('servicios_ids');
+  // --- CÁLCULOS EN TIEMPO REAL ---
+  const added_service_ids = watch('servicios_ids');
 
-  const totalEstimado = addedServiceIds.reduce((sum, id) => {
+  const total_estimado = added_service_ids.reduce((sum, id) => {
     const service = services.find((s) => s.id === id);
     return sum + (service?.precioBase || 0);
   }, 0);
 
-  const duracionTotal = addedServiceIds.reduce((sum, id) => {
+  const duracion_total = added_service_ids.reduce((sum, id) => {
     const service = services.find((s) => s.id === id);
     return sum + (service?.duracionMinutos || 0);
   }, 0);
 
-  // Fecha mínima (hoy)
+  // Fecha mínima (hoy) para el input datetime-local
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
   const min_datetime = now.toISOString().slice(0, 16);
 
   // --- HANDLERS ---
 
-  const handleAddService = () => {
-    if (!selectedServiceId) return;
-    if (addedServiceIds.includes(selectedServiceId)) return;
+  const handle_add_service = () => {
+    if (!selected_service_id) return;
+    if (added_service_ids.includes(selected_service_id)) return;
 
-    const newIds = [...addedServiceIds, selectedServiceId];
-    setValue('servicios_ids', newIds, { shouldValidate: true });
-    setSelectedServiceId('');
+    const new_ids = [...added_service_ids, selected_service_id];
+    setValue('servicios_ids', new_ids, { shouldValidate: true });
+    set_selected_service_id('');
   };
 
-  const handleRemoveService = (idToRemove: string) => {
-    const newIds = addedServiceIds.filter((id) => id !== idToRemove);
-    setValue('servicios_ids', newIds, { shouldValidate: true });
+  const handle_remove_service = (id_to_remove: string) => {
+    const new_ids = added_service_ids.filter((id) => id !== id_to_remove);
+    setValue('servicios_ids', new_ids, { shouldValidate: true });
   };
 
   /**
    * Envío del formulario.
-   * En lugar de alert(), delega el éxito al padre mediante onSuccess().
+   * Construye el payload incluyendo el empleado asignado.
    */
-  const onSubmit: SubmitHandler<AppointmentFormValues> = async (data) => {
+  const on_submit: SubmitHandler<AppointmentFormValues> = async (data) => {
     if (!user || !activeBranch) return;
-    setApiError(null);
+    set_api_error(null);
 
     const payload = {
       usuario_id: data.cliente_id,
+      // Enviamos undefined si es string vacío para que el backend lo ignore limpiamente
+      empleado_id: data.empleado_id || undefined,
       servicios_ids: data.servicios_ids,
       fecha_hora: new Date(data.fecha_hora).toISOString(),
     };
@@ -112,27 +127,26 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
     try {
       await api_client.post('/appointments', payload);
 
-      // Notificamos al padre que todo salió bien
       if (onSuccess) {
         onSuccess();
       }
     } catch (error: any) {
       console.error('Error al agendar cita:', error);
-      // Mostramos el error dentro del formulario (UX no intrusiva)
       const msg = error.response?.data?.message || 'Ocurrió un error al guardar.';
-      setApiError(msg);
+      set_api_error(msg);
     }
   };
 
+  // Validaciones de carga inicial
   if (!activeBranch) return <p>Selecciona una sucursal.</p>;
-  if (isLoadingServices || isLoadingClients) return <p>Cargando catálogos...</p>;
+  if (is_loading_services || is_loading_clients || is_loading_employees) return <p>Cargando catálogos...</p>;
 
   return (
     <div className="appointment-form-container">
-      <h3 className="form-title">Nueva Cita (Carrito)</h3>
+      <h3 className="form-title">Nueva Cita</h3>
 
-      {/* Mensaje de error de API */}
-      {apiError && (
+      {/* Feedback de errores de API */}
+      {api_error && (
         <div
           style={{
             padding: '0.8rem',
@@ -143,28 +157,49 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
             fontSize: '0.9rem',
           }}
         >
-          {apiError}
+          {api_error}
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="appointment-form">
-        {/* 1. Selección de Cliente */}
-        <div className="form-group">
-          <label htmlFor="cliente_id" className="form-label">
-            Cliente
-          </label>
-          <select id="cliente_id" disabled={isSubmitting} className="form-select" {...register('cliente_id')}>
-            <option value="">-- Seleccionar Cliente --</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre} ({c.email})
-              </option>
-            ))}
-          </select>
-          {errors.cliente_id && <span className="error-message">{errors.cliente_id.message}</span>}
+      <form onSubmit={handleSubmit(on_submit)} className="appointment-form">
+        {/*
+          SECCIÓN 1: CLIENTE Y EMPLEADO
+          Usamos Grid para ponerlos lado a lado.
+        */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          {/* Selector de Cliente */}
+          <div className="form-group">
+            <label htmlFor="cliente_id" className="form-label">
+              Cliente
+            </label>
+            <select id="cliente_id" disabled={isSubmitting} className="form-select" {...register('cliente_id')}>
+              <option value="">-- Seleccionar --</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre} ({c.email})
+                </option>
+              ))}
+            </select>
+            {errors.cliente_id && <span className="error-message">{errors.cliente_id.message}</span>}
+          </div>
+
+          {/* Selector de Empleado (Nuevo Sprint 3) */}
+          <div className="form-group">
+            <label htmlFor="empleado_id" className="form-label">
+              Atiende (Opcional)
+            </label>
+            <select id="empleado_id" disabled={isSubmitting} className="form-select" {...register('empleado_id')}>
+              <option value="">-- Cualquiera --</option>
+              {employees.map((e) => (
+                <option key={e.empleado_id} value={e.empleado_id}>
+                  {e.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* 2. Carrito de Servicios */}
+        {/* SECCIÓN 2: CARRITO DE SERVICIOS */}
         <div className="service-cart">
           <label htmlFor="service_selector" className="form-label">
             Agregar Servicios
@@ -172,38 +207,39 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
           <div className="cart-controls">
             <select
               id="service_selector"
-              value={selectedServiceId}
-              onChange={(e) => setSelectedServiceId(e.target.value)}
+              value={selected_service_id}
+              onChange={(e) => set_selected_service_id(e.target.value)}
               disabled={isSubmitting}
               className="form-select"
             >
               <option value="">-- Elegir servicio --</option>
               {services.map((s) => (
-                <option key={s.id} value={s.id} disabled={addedServiceIds.includes(s.id)}>
+                <option key={s.id} value={s.id} disabled={added_service_ids.includes(s.id)}>
                   {s.nombre} (${s.precioBase})
                 </option>
               ))}
             </select>
             <button
               type="button"
-              onClick={handleAddService}
-              disabled={!selectedServiceId || isSubmitting}
+              onClick={handle_add_service}
+              disabled={!selected_service_id || isSubmitting}
               className="btn-add"
             >
               +
             </button>
           </div>
 
-          {addedServiceIds.length > 0 && (
+          {/* Lista de items agregados */}
+          {added_service_ids.length > 0 && (
             <ul className="cart-list">
-              {addedServiceIds.map((id) => {
+              {added_service_ids.map((id) => {
                 const s = services.find((srv) => srv.id === id);
                 return (
                   <li key={id} className="cart-item">
                     <span>{s?.nombre}</span>
                     <div className="cart-item-details">
                       <span className="cart-item-price">${s?.precioBase}</span>
-                      <button type="button" onClick={() => handleRemoveService(id)} className="btn-remove">
+                      <button type="button" onClick={() => handle_remove_service(id)} className="btn-remove">
                         ✕
                       </button>
                     </div>
@@ -215,16 +251,16 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
 
           <div className="cart-summary">
             <div>
-              Duración: <strong>{duracionTotal} min</strong>
+              Duración: <strong>{duracion_total} min</strong>
             </div>
             <div className="cart-total-price">
-              Total: <strong>${totalEstimado}</strong>
+              Total: <strong>${total_estimado}</strong>
             </div>
           </div>
           {errors.servicios_ids && <span className="error-message">{errors.servicios_ids.message}</span>}
         </div>
 
-        {/* 3. Fecha */}
+        {/* SECCIÓN 3: FECHA Y HORA */}
         <div className="form-group">
           <label htmlFor="fecha_hora" className="form-label">
             Fecha y Hora
@@ -239,8 +275,9 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
           {errors.fecha_hora && <span className="error-message">{errors.fecha_hora.message}</span>}
         </div>
 
+        {/* BOTÓN DE ACCIÓN */}
         <button type="submit" disabled={isSubmitting} className="btn-submit">
-          {isSubmitting ? 'Guardando...' : `Confirmar Cita ($${totalEstimado})`}
+          {isSubmitting ? 'Guardando...' : `Confirmar Cita ($${total_estimado})`}
         </button>
       </form>
     </div>
