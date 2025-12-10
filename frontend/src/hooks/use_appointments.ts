@@ -11,11 +11,13 @@ export type Appointment = {
   // Datos Visuales
   servicio: string;
   cliente: string;
+  empleado: string; // Nombre para mostrar en tabla/detalle
   fechaHora: string;
   estado: string;
   total: number;
   // Datos Lógicos (para edición)
   cliente_id: string;
+  empleado_id: string | null; // ID para formularios (puede ser null)
   servicios_items: {
     id: string;
     nombre: string;
@@ -49,22 +51,34 @@ export const useAppointments = () => {
 /**
  * Hook para Mutaciones de Cita (Edición).
  * Encapsula la lógica de PATCH y la invalidación de caché.
+ *
+ * ACTUALIZACIÓN SPRINT 3: Ahora soporta la reasignación de empleado (`empleado_id`).
  */
 export const useEditAppointment = () => {
   const queryClient = useQueryClient();
   const { activeBranch } = useBranch();
 
   return useMutation({
-    mutationFn: async ({ id, servicios_ids }: { id: string; servicios_ids: string[] }) => {
-      // El backend ya tiene el BranchGuard, pero el interceptor inyecta el header.
-      // El endpoint es PATCH /appointments/:id/items
+    mutationFn: async ({
+      id,
+      servicios_ids,
+      empleado_id,
+    }: {
+      id: string;
+      servicios_ids: string[];
+      empleado_id?: string; // Opcional: si viene, actualiza el empleado
+    }) => {
+      // Enviamos el payload combinado al endpoint de actualización de items.
+      // El backend debe estar preparado para recibir 'empleado_id' en este PATCH.
       const response = await api_client.patch(`/appointments/${id}/items`, {
         servicios_ids,
+        empleado_id,
       });
       return response.data;
     },
     onSuccess: () => {
       // Al tener éxito, forzamos la recarga de la lista de citas de esta sucursal
+      // para reflejar los cambios de precio o empleado inmediatamente.
       queryClient.invalidateQueries(['branch', activeBranch?.id, 'appointments']);
     },
   });

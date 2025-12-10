@@ -18,18 +18,25 @@ export class AppointmentsService {
   /**
    * Lista las citas de una sucursal con metadatos para la UI.
    * Se incluyen IDs de relaciones para permitir la edición en el frontend.
+   * Se incluye información del empleado asignado.
    */
   async listar(sucursal_id: string) {
     const citas_db = await this.prisma.cita.findMany({
       where: { sucursalId: sucursal_id },
       orderBy: { fechaHora: "asc" },
       include: {
-        usuario: { select: { id: true, nombre: true, email: true } }, // Traemos ID
+        usuario: { select: { id: true, nombre: true, email: true } },
+        // Incluimos al empleado y su perfil de usuario para obtener el nombre
+        empleado: {
+          include: {
+            usuario: { select: { nombre: true } },
+          },
+        },
         servicios: {
           include: {
             servicio: {
               select: { id: true, nombre: true, duracionMinutos: true },
-            }, // Traemos ID
+            },
           },
         },
       },
@@ -40,6 +47,9 @@ export class AppointmentsService {
         .map((item) => item.servicio.nombre)
         .join(", ");
 
+      // Lógica de presentación para empleado
+      const nombre_empleado = cita.empleado?.usuario?.nombre ?? "No asignado";
+
       // Mapeamos a una estructura plana pero rica en datos
       return {
         id: cita.id,
@@ -48,11 +58,13 @@ export class AppointmentsService {
 
         // Datos de presentación
         cliente: cita.usuario?.nombre ?? "Cliente Anónimo",
+        empleado: nombre_empleado,
         servicio: lista_nombres || "Sin servicios asignados",
         total: Number(cita.total),
 
         // Metadatos para Edición (Hidden fields en tabla, usados en Modal)
         cliente_id: cita.usuarioId,
+        empleado_id: cita.empleadoId,
         servicios_items: cita.servicios.map((s) => ({
           id: s.servicio.id,
           nombre: s.servicio.nombre,
@@ -144,7 +156,8 @@ export class AppointmentsService {
   async actualizar_items(
     cita_id: string,
     nuevos_servicios_ids: string[],
-    sucursal_id: string
+    sucursal_id: string,
+    nuevo_empleado_id?: string
   ) {
     return this.prisma.$transaction(async (tx) => {
       // 1. Validación Inicial
@@ -189,12 +202,11 @@ export class AppointmentsService {
       );
 
       // 5. Inserción de Nuevas Relaciones y Actualización de Cabecera
-      // Nota: Usamos createMany si el driver lo soporta, o update con 'create' anidado.
-      // Para máxima compatibilidad y simplicidad con la relación anidada en update:
       const cita_actualizada = await tx.cita.update({
         where: { id: cita_id },
         data: {
           total: nuevo_total,
+          empleadoId: nuevo_empleado_id, // <--- Actualización del empleado
           servicios: {
             create: servicios_nuevos.map((srv) => ({
               servicioId: srv.id,
@@ -255,9 +267,40 @@ export class AppointmentsService {
 
   /**
    * Cierra una cita (Proceso de Venta).
+   * ACTUALIZACIÓN SPRINT 3: Admite `empleado_id` para asignar responsable de última hora
+   * antes de calcular comisiones.
    */
-  async cerrar(cita_id: string, sucursal_id: string) {
+  async cerrar(cita_id: string, sucursal_id: string, empleado_id?: string) {
     return this.prisma.$transaction(async (tx) => {
+      // 1. REASIGNACIÓN PREVIA (Si se envió un empleado al cerrar)
+      // Esto es crítico: debe ocurrir ANTES de leer la 'cita_completa' para que
+      // el cálculo de comisión use al empleado correcto.
+      if (empleado_id) {
+        // Validamos seguridad: el empleado debe ser de la sucursal
+        const es_valido = await tx.empleadoSucursal.findUnique({
+          where: {
+            empleadoId_sucursalId: {
+              empleadoId: empleado_id,
+              sucursalId: sucursal_id,
+            },
+          },
+        });
+
+        if (!es_valido) {
+          throw new BadRequestException(
+            "El empleado seleccionado no pertenece a esta sucursal."
+          );
+        }
+
+        // Actualizamos la cita
+        await tx.cita.update({
+          where: { id: cita_id },
+          data: { empleadoId: empleado_id },
+        });
+      }
+
+      // 2. OBTENCIÓN DE DATOS COMPLETOS
+      // Ahora sí leemos la cita. Si se actualizó arriba, 'empleado' vendrá correcto.
       const cita_completa = await tx.cita.findUnique({
         where: { id: cita_id },
         include: {
@@ -266,24 +309,26 @@ export class AppointmentsService {
               servicio: { include: { serviciosMateriales: true } },
             },
           },
-          empleado: true,
+          empleado: true, // Trae porcentajeComision
           usuario: true,
         },
       });
 
       if (!cita_completa) throw new NotFoundException("La cita no existe.");
+
       if (cita_completa.sucursalId !== sucursal_id) {
         throw new BadRequestException(
           "Error de seguridad: Sucursal incorrecta."
         );
       }
+
       if (cita_completa.estado === CitaEstado.cerrada) {
         throw new ConflictException("La cita ya fue cerrada previamente.");
       }
 
       const monto_total = Number(cita_completa.total);
 
-      // Descuento de Inventario
+      // 3. DESCUENTO DE INVENTARIO
       for (const item_venta of cita_completa.servicios) {
         const receta = item_venta.servicio.serviciosMateriales;
         for (const insumo of receta) {
@@ -320,7 +365,7 @@ export class AppointmentsService {
         }
       }
 
-      // Puntos (5%)
+      // 4. GENERACIÓN DE PUNTOS (5%)
       const puntos_a_otorgar = Math.floor(monto_total * 0.05);
       if (cita_completa.usuarioId && puntos_a_otorgar > 0) {
         await tx.puntosMovimiento.create({
@@ -335,10 +380,12 @@ export class AppointmentsService {
         });
       }
 
-      // Comisiones
+      // 5. CÁLCULO DE COMISIONES
+      // Usamos el empleado que acabamos de asegurar en el paso 1.
       if (cita_completa.empleado) {
         const pct = Number(cita_completa.empleado.porcentajeComision);
         const monto_comision = monto_total * (pct / 100);
+
         if (monto_comision > 0) {
           await tx.comision.create({
             data: {
@@ -351,19 +398,20 @@ export class AppointmentsService {
         }
       }
 
-      // Update Estado & Audit
+      // 6. ACTUALIZACIÓN DE ESTADO FINAL
       const cita_actualizada = await tx.cita.update({
         where: { id: cita_id },
         data: { estado: CitaEstado.cerrada },
       });
 
+      // 7. AUDITORÍA
       await tx.auditLog.create({
         data: {
           entidad: "Cita",
           accion: "Cierre",
           sucursalId: sucursal_id,
           usuarioId: cita_completa.usuarioId,
-          descripcion: `Cierre venta. Total: $${monto_total}`,
+          descripcion: `Cierre venta. Total: $${monto_total}. Empleado: ${cita_completa.empleado?.id ?? "Ninguno"}`,
         },
       });
 

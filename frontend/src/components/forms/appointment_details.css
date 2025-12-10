@@ -138,6 +138,56 @@
   font-size: 1.5rem;
 }
 
+/* --- 1.5 Selector de Edición en Línea (MEJORADO PARA TICKET) --- */
+.inline-edit-select {
+  width: 100%;
+  /* Aumentamos altura mínima para evitar cortes y mejorar touch */
+  min-height: 48px;
+  /* Ajuste de padding para centrar verticalmente el texto y dar espacio a la flecha */
+  padding: 0.6rem 2.5rem 0.6rem 1rem;
+
+  font-size: 0.95rem;
+  font-family: inherit;
+  font-weight: 500;
+  line-height: 1.5; /* Altura de línea para que las letras (g, j, p) no se corten abajo */
+
+  /* Colores basados en variables del tema */
+  background-color: var(--input-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px; /* Bordes un poco más suaves */
+
+  cursor: pointer;
+
+  /* Reset de estilos nativos para control total */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+
+  /* Flecha personalizada (SVG) */
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1.2em;
+
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.inline-edit-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); /* Halo de foco sutil */
+}
+
+/* Asegurar que las opciones sean legibles en modo oscuro */
+.inline-edit-select option {
+  background-color: var(--bg-panel);
+  color: var(--text-primary);
+  padding: 10px;
+}
+
 /* --- 2. Item de Lista (Servicio + Botón Eliminar) --- */
 .edit-list-item {
   display: flex;
@@ -240,4 +290,46 @@
   font-size: 1.1rem;
   color: var(--text-secondary);
   line-height: 1.5;
+}
+
+/* --- NUEVO: Estilo para el resumen de venta (Ticket) en el modal de cierre --- */
+.checkout-summary {
+  background-color: var(--bg-body);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.checkout-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.checkout-total {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.8rem;
+  padding-top: 0.8rem;
+  border-top: 1px dashed var(--border-color);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+
+.btn-link-action {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+  margin-top: 0.5rem;
+}
+.btn-link-action:hover {
+  color: var(--primary-hover);
 }

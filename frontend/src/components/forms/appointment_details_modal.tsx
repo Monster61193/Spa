@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Modal } from '../ui/modal';
 import { useServices } from '../../hooks/use_services';
+import { useEmployees } from '../../hooks/use_employees';
 import { useEditAppointment, useCancelAppointment, Appointment } from '../../hooks/use_appointments';
 import './appointment_details.css';
 
@@ -10,9 +11,6 @@ type Props = {
   appointment: Appointment | null;
 };
 
-/**
- * Estado local para manejar mensajes de éxito/error sin usar alert().
- */
 type LocalFeedback = {
   is_open: boolean;
   title: string;
@@ -21,28 +19,30 @@ type LocalFeedback = {
 };
 
 /**
- * Modal híbrido: Visualización, Edición y Cancelación.
- *
- * Refactorizado para eliminar prompts nativos y usar modales anidados
- * para una experiencia de usuario (UX) consistente.
+ * Modal híbrido: Visualización y Edición de Citas.
+ * Soporta edición en línea (Inline Editing) para el empleado y el estado.
  */
 export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props) => {
-  // --- HOOKS DE DATOS ---
+  // --- HOOKS ---
   const { data: catalog_services = [] } = useServices();
+  const { data: employees = [] } = useEmployees();
   const { mutate: edit_appointment, isLoading: is_saving } = useEditAppointment();
   const { mutate: cancel_appointment, isLoading: is_canceling } = useCancelAppointment();
 
-  // --- ESTADOS DE FLUJO PRINCIPAL ---
+  // --- ESTADOS ---
   const [is_editing, set_is_editing] = useState(false);
+
+  // Servicios
   const [selected_service_ids, set_selected_service_ids] = useState<string[]>([]);
   const [temp_selector, set_temp_selector] = useState<string>('');
 
-  // --- ESTADOS DE FLUJO DE CANCELACIÓN (Reemplazo de prompt) ---
+  // Empleado (Estado para el select)
+  const [selected_employee_id, set_selected_employee_id] = useState<string | null>(null);
+
+  // Cancelación y Feedback
   const [is_cancel_modal_open, set_is_cancel_modal_open] = useState(false);
   const [cancellation_reason, set_cancellation_reason] = useState('');
   const [cancellation_error, set_cancellation_error] = useState<string | null>(null);
-
-  // --- ESTADO DE FEEDBACK (Reemplazo de alerts) ---
   const [feedback, set_feedback] = useState<LocalFeedback>({
     is_open: false,
     title: '',
@@ -53,9 +53,9 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
   // --- EFECTOS ---
   useEffect(() => {
     if (isOpen) {
-      // Reset completo al abrir
       set_is_editing(false);
       set_selected_service_ids([]);
+      set_selected_employee_id(null);
       set_temp_selector('');
       set_is_cancel_modal_open(false);
       set_cancellation_reason('');
@@ -64,7 +64,7 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
     }
   }, [isOpen, appointment]);
 
-  // --- LÓGICA DE PRESENTACIÓN (MEMOS) ---
+  // --- MEMOS ---
   const fecha_formateada = useMemo(() => {
     if (!appointment) return '';
     return new Date(appointment.fechaHora).toLocaleDateString('es-MX', {
@@ -91,27 +91,26 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
     return edit_mode_items.reduce((sum, item) => sum + (item?.precioBase || 0), 0);
   }, [edit_mode_items]);
 
-  // --- HANDLERS AUXILIARES ---
-
+  // --- HANDLERS ---
   const show_feedback = (title: string, message: string, type: 'success' | 'error' | 'warning') => {
     set_feedback({ is_open: true, title, message, type });
   };
 
   const close_feedback = () => {
     set_feedback((prev) => ({ ...prev, is_open: false }));
-    // Si fue éxito (cancelación o edición), cerramos el modal principal también
-    if (feedback.type === 'success') {
-      onClose();
-    }
+    if (feedback.type === 'success') onClose();
   };
 
-  // --- HANDLERS EDICIÓN ---
-
   const toggle_edit_mode = () => {
-    if (appointment?.servicios_items && appointment.servicios_items.length > 0) {
-      set_selected_service_ids(appointment.servicios_items.map((item) => item.id));
-    } else {
-      set_selected_service_ids([]);
+    if (appointment) {
+      // Precargar servicios
+      if (appointment.servicios_items && appointment.servicios_items.length > 0) {
+        set_selected_service_ids(appointment.servicios_items.map((item) => item.id));
+      } else {
+        set_selected_service_ids([]);
+      }
+      // Precargar empleado
+      set_selected_employee_id(appointment.empleado_id || '');
     }
     set_is_editing(true);
   };
@@ -137,10 +136,11 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
       {
         id: appointment.id,
         servicios_ids: selected_service_ids,
+        empleado_id: selected_employee_id || undefined,
       },
       {
         onSuccess: () => {
-          show_feedback('¡Actualización Exitosa!', 'Los servicios de la cita han sido modificados.', 'success');
+          show_feedback('¡Actualización Exitosa!', 'La cita ha sido modificada correctamente.', 'success');
         },
         onError: (error: any) => {
           const msg = error.response?.data?.message || 'Error al actualizar.';
@@ -150,8 +150,6 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
     );
   };
 
-  // --- HANDLERS CANCELACIÓN ---
-
   const open_cancel_modal = () => {
     set_cancellation_reason('');
     set_cancellation_error(null);
@@ -160,23 +158,19 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
 
   const handle_confirm_cancel = () => {
     if (!appointment) return;
-
-    // Validación local antes de enviar
     if (cancellation_reason.trim().length < 5) {
       set_cancellation_error('El motivo debe tener al menos 5 caracteres.');
       return;
     }
-
     cancel_appointment(
       { id: appointment.id, motivo: cancellation_reason },
       {
         onSuccess: () => {
-          set_is_cancel_modal_open(false); // Cerramos el modal de input
-          show_feedback('Cita Cancelada', 'La cita ha sido cancelada correctamente y el horario liberado.', 'success');
+          set_is_cancel_modal_open(false);
+          show_feedback('Cita Cancelada', 'La cita ha sido cancelada correctamente.', 'success');
         },
         onError: (err: any) => {
           const msg = err.response?.data?.message || 'No se pudo cancelar.';
-          // Cerramos el modal de input para mostrar el error claramente
           set_is_cancel_modal_open(false);
           show_feedback('Error al Cancelar', msg, 'error');
         },
@@ -184,42 +178,75 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
     );
   };
 
-  // --- RENDER ---
   if (!appointment) return null;
   const is_busy = is_saving || is_canceling;
 
   return (
     <>
-      {/* 1. MODAL PRINCIPAL (Detalles/Edición) */}
       <Modal is_open={isOpen} on_close={onClose} title="">
         <div className="details-header">
-          <h2 className="details-title">{is_editing ? 'Modificar Servicios' : 'Detalle de Cita'}</h2>
+          <h2 className="details-title">{is_editing ? 'Modificar Cita' : 'Detalle de Cita'}</h2>
           <p className="details-subtitle">Folio: {appointment.id}</p>
         </div>
 
-        {/* Info Estática */}
+        {/* --- GRID DE INFORMACIÓN (Inline Editing Integrado) --- */}
         <div className="details-grid">
           <div className="info-group">
             <span className="info-label">Cliente</span>
             <span className="info-value">{appointment.cliente}</span>
           </div>
+
+          {/* CAMPO ATENDIDO POR: Switch texto/select */}
+          <div className="info-group">
+            <label htmlFor="edit-employee" className="info-label">
+              Atendido por
+            </label>
+            {is_editing ? (
+              // MODO EDICIÓN: Selector
+              <select
+                id="edit-employee"
+                className="inline-edit-select" // <--- CLASE NUEVA AQUÍ
+                value={selected_employee_id || ''}
+                onChange={(e) => set_selected_employee_id(e.target.value)}
+                disabled={is_busy}
+              >
+                <option value="">-- Sin Asignar --</option>
+                {employees.map((emp) => (
+                  <option key={emp.empleado_id} value={emp.empleado_id}>
+                    {emp.nombre}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              // MODO LECTURA: Texto
+              <span
+                className="info-value"
+                style={{ color: appointment.empleado === 'No asignado' ? 'var(--text-secondary)' : 'inherit' }}
+              >
+                {appointment.empleado}
+              </span>
+            )}
+          </div>
+
           <div className="info-group">
             <span className="info-label">Estado</span>
             <span className={`badge-status status-${appointment.estado}`} style={{ width: 'fit-content' }}>
               {appointment.estado}
             </span>
           </div>
+
           <div className="info-group">
             <span className="info-label">Fecha</span>
             <span className="info-value">{fecha_formateada}</span>
           </div>
+
           <div className="info-group">
             <span className="info-label">Hora</span>
             <span className="info-value">{hora_formateada}</span>
           </div>
         </div>
 
-        {/* Contenido Dinámico */}
+        {/* --- SECCIÓN SERVICIOS --- */}
         {!is_editing ? (
           <div className="services-section">
             <h4
@@ -250,10 +277,15 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
           </div>
         ) : (
           <div className="edit-mode-container">
-            {/* ... (Contenido de edición igual que antes) ... */}
+            {/* El selector de empleados se movió arriba a la Grid. Aquí solo quedan los servicios. */}
+
+            <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '1rem 0' }} />
+
+            <h4 style={{ margin: '0 0 0.5rem 0' }}>Servicios</h4>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
               Agrega o elimina servicios. Total recalculado automáticamente.
             </p>
+
             <div className="service-selector-group">
               <select
                 className="service-select"
@@ -272,7 +304,7 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
                 +
               </button>
             </div>
-            {/* Lista Editable */}
+
             <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
               {edit_mode_items.map(
                 (item) =>
@@ -287,9 +319,7 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
                       <button
                         className="btn-remove-item"
                         onClick={() => handle_remove_service(item.id)}
-                        // --- CORRECCIÓN AQUÍ ---
-                        title="Eliminar servicio" // Agregamos el título para testing y a11y
-                        // -----------------------
+                        title="Eliminar servicio"
                       >
                         ✕
                       </button>
@@ -297,6 +327,7 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
                   ),
               )}
             </div>
+
             <div
               style={{
                 textAlign: 'right',
@@ -310,14 +341,10 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
           </div>
         )}
 
-        {/* Footer */}
+        {/* --- FOOTER BOTONES --- */}
         <div className="details-actions" style={{ justifyContent: 'space-between' }}>
           {!is_editing && appointment.estado === 'pendiente' ? (
-            <button
-              className="btn-danger"
-              onClick={open_cancel_modal} // Ahora abre el modal, no el prompt
-              disabled={is_busy}
-            >
+            <button className="btn-danger" onClick={open_cancel_modal} disabled={is_busy}>
               Cancelar Cita
             </button>
           ) : (
@@ -332,7 +359,7 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
                 </button>
                 {appointment.estado === 'pendiente' && (
                   <button className="btn-primary" onClick={toggle_edit_mode} disabled={is_busy}>
-                    Editar Servicios
+                    Editar Cita
                   </button>
                 )}
               </>
@@ -354,17 +381,13 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
         </div>
       </Modal>
 
-      {/* 2. MODAL DE CANCELACIÓN (Sub-flujo) */}
+      {/* Modales Anidados (Feedback y Cancelación) */}
       <Modal is_open={is_cancel_modal_open} on_close={() => set_is_cancel_modal_open(false)} title="Cancelar Cita">
         <div className="cancel-form-container">
-          <p className="cancel-warning-text">
-            Esta acción es <strong>irreversible</strong>. Por favor, indica el motivo de la cancelación para la
-            bitácora:
-          </p>
-
+          <p className="cancel-warning-text">Esta acción es irreversible.</p>
           <textarea
             className="cancel-textarea"
-            placeholder="Ej: El cliente no pudo asistir por enfermedad..."
+            placeholder="Motivo de cancelación..."
             value={cancellation_reason}
             onChange={(e) => {
               set_cancellation_reason(e.target.value);
@@ -373,9 +396,7 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
             disabled={is_canceling}
             autoFocus
           />
-
           {cancellation_error && <p className="text-error">{cancellation_error}</p>}
-
           <div className="modal-actions" style={{ marginTop: '1rem' }}>
             <button
               className="btn-secondary-action"
@@ -389,23 +410,20 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
               onClick={handle_confirm_cancel}
               disabled={is_canceling || cancellation_reason.trim().length < 5}
             >
-              {is_canceling ? 'Procesando...' : 'Confirmar Cancelación'}
+              {is_canceling ? 'Procesando...' : 'Confirmar'}
             </button>
           </div>
         </div>
       </Modal>
 
-      {/* 3. MODAL DE FEEDBACK (Reemplazo de Alerts) */}
       <Modal is_open={feedback.is_open} on_close={close_feedback} title={feedback.title}>
         <div className="local-feedback-content">
           <div className="local-feedback-icon">
-            {feedback.type === 'success' && '✅'}
-            {feedback.type === 'warning' && '⚠️'}
-            {feedback.type === 'error' && '❌'}
+            {feedback.type === 'success' ? '✅' : feedback.type === 'warning' ? '⚠️' : '❌'}
           </div>
           <p className="local-feedback-msg">{feedback.message}</p>
-          <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
-            <button className="btn-primary" onClick={close_feedback} autoFocus>
+          <div className="modal-actions">
+            <button className="btn-primary" onClick={close_feedback}>
               Aceptar
             </button>
           </div>

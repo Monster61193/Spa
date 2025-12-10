@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import * as bcrypt from "bcrypt";
 import {
   branches,
   services_catalog,
@@ -9,10 +10,6 @@ import {
 
 const prisma = new PrismaClient();
 
-/**
- * Definición local de la estructura de una fila de inventario en los mocks.
- * Ayuda a TypeScript a entender el tipo 'any' que viene de sample-data.
- */
 type InventoryRow = {
   material: string;
   stockActual: number;
@@ -37,7 +34,109 @@ async function main() {
     )
   );
 
-  // 2. Servicios
+  // 2. Usuarios y Empleados (FIX PARA SPRINT 3)
+  const password = await bcrypt.hash("123456", 10);
+
+  // A. Admin General (Usuario existente)
+  await prisma.usuario.upsert({
+    where: { email: "admin@test.com" },
+    update: {},
+    create: {
+      email: "admin@test.com",
+      nombre: "Admin General",
+      password,
+      // Admin también es empleado para pruebas
+      empleado: {
+        create: {
+          porcentajeComision: 0,
+          sucursales: {
+            create: [
+              {
+                sucursalId: "branch-principal",
+                rolLocal: "admin",
+                predeterminada: true,
+              },
+              {
+                sucursalId: "branch-norte",
+                rolLocal: "admin",
+                predeterminada: false,
+              },
+            ],
+          },
+        },
+      },
+    },
+  });
+
+  // B. Ana Estilista (Empleado Principal)
+  const ana = await prisma.usuario.upsert({
+    where: { email: "ana@spa.com" },
+    update: {},
+    create: {
+      email: "ana@spa.com",
+      nombre: "Ana Estilista",
+      password,
+      empleado: {
+        create: {
+          porcentajeComision: 10, // 10% de comisión
+          sucursales: {
+            create: [
+              {
+                sucursalId: "branch-principal",
+                rolLocal: "estilista",
+                predeterminada: true,
+              },
+            ],
+          },
+        },
+      },
+    },
+  });
+
+  // C. Pedro Masajista (Empleado Principal + Norte)
+  const pedro = await prisma.usuario.upsert({
+    where: { email: "pedro@spa.com" },
+    update: {},
+    create: {
+      email: "pedro@spa.com",
+      nombre: "Pedro Masajista",
+      password,
+      empleado: {
+        create: {
+          porcentajeComision: 15, // 15% de comisión
+          sucursales: {
+            create: [
+              {
+                sucursalId: "branch-principal",
+                rolLocal: "masajista",
+                predeterminada: true,
+              },
+              {
+                sucursalId: "branch-norte",
+                rolLocal: "gerente",
+                predeterminada: false,
+              },
+            ],
+          },
+        },
+      },
+    },
+  });
+
+  // D. Cliente Test
+  await prisma.usuario.upsert({
+    where: { email: "cliente@gmail.com" },
+    update: {},
+    create: {
+      email: "cliente@gmail.com",
+      nombre: "María Cliente",
+      password,
+    },
+  });
+
+  console.log("✅ Usuarios y Empleados creados.");
+
+  // 3. Servicios
   await prisma.$transaction(
     services_catalog.map((service) =>
       prisma.servicio.upsert({
@@ -53,7 +152,7 @@ async function main() {
     )
   );
 
-  // 3. Overrides
+  // 4. Overrides
   await prisma.$transaction(
     services_overrides.map((override) =>
       prisma.servicioSucursal.upsert({
@@ -74,7 +173,7 @@ async function main() {
     )
   );
 
-  // 4. Promociones
+  // 5. Promociones
   await prisma.$transaction(
     promotions_catalog.map((promo) =>
       prisma.promocion.upsert({
@@ -93,11 +192,9 @@ async function main() {
     )
   );
 
-  // 5. Materiales e Inventario
+  // 6. Materiales e Inventario
   const material_names = new Map<string, { nombre: string; unidad: string }>();
 
-  // Recolectar nombres únicos
-  // CORRECCIÓN: Tipamos explícitamente 'rows' como InventoryRow[]
   Object.entries(inventory_snapshot).forEach(([sucursal_id, rows]) => {
     (rows as InventoryRow[]).forEach((row) => {
       const material_id = `${sucursal_id}-${row.material.replace(/\s+/g, "-").toLowerCase()}`;
@@ -108,7 +205,6 @@ async function main() {
     });
   });
 
-  // Insertar Materiales
   await prisma.$transaction(
     Array.from(material_names.entries()).map(([id, info]) =>
       prisma.material.upsert({
@@ -124,8 +220,6 @@ async function main() {
     )
   );
 
-  // Insertar Existencias
-  // CORRECCIÓN: Tipamos explícitamente 'rows' y 'row' para evitar el error "implicitly has any type"
   await prisma.$transaction(
     Object.entries(inventory_snapshot).flatMap(([sucursalId, rows]) =>
       (rows as InventoryRow[]).map((row) => {
@@ -149,102 +243,15 @@ async function main() {
     )
   );
 
-  // 6. VINCULACIÓN: Servicios consumen Materiales (RECETA)
-  console.log("🔗 Vinculando Servicios con Materiales...");
-
-  const servicio_manicure = "serv-1";
-  const material_gel = "branch-principal-gel-uñas";
-  const material_esponja = "branch-principal-esponjas-termales";
-
-  const recetas = [
-    { servicioId: servicio_manicure, materialId: material_gel, cantidad: 10 },
-    {
-      servicioId: servicio_manicure,
-      materialId: material_esponja,
-      cantidad: 2,
-    },
-  ];
-
-  for (const receta of recetas) {
-    await prisma.servicioMaterial.upsert({
-      where: {
-        servicioId_materialId: {
-          servicioId: receta.servicioId,
-          materialId: receta.materialId,
-        },
-      },
-      update: { cantidad: receta.cantidad },
-      create: {
-        servicioId: receta.servicioId,
-        materialId: receta.materialId,
-        cantidad: receta.cantidad,
-      },
-    });
-  }
-  console.log("✅ Recetas de servicios cargadas.");
-
-  // 7. INVENTARIO INICIAL (STOCK)
-  // Esto soluciona el error "No tiene registro en esta sucursal"
-  console.log("📦 Llenando inventario inicial...");
-
-  const inventario_inicial = [
-    {
-      sucursalId: "branch-principal",
-      materialId: "branch-principal-gel-uñas", // El ID que dio error en tu captura
-      nombreMaterial: "Gel Uñas",
-      stock: 500, // Suficiente para muchas citas
-      minimo: 20,
-    },
-    {
-      sucursalId: "branch-principal",
-      materialId: "branch-principal-esponjas-termales",
-      nombreMaterial: "Esponjas Termales",
-      stock: 200,
-      minimo: 50,
-    },
-  ];
-
-  for (const item of inventario_inicial) {
-    // 1. Aseguramos que el Material exista globalmente
-    await prisma.material.upsert({
-      where: { id: item.materialId },
-      update: {},
-      create: {
-        id: item.materialId,
-        nombre: item.nombreMaterial,
-        unidad: "ml/pz",
-        costoUnitario: 50,
-      },
-    });
-
-    // 2. Aseguramos que la Sucursal tenga Existencia (Stock) de ese material
-    await prisma.existencia.upsert({
-      where: {
-        sucursalId_materialId: {
-          sucursalId: item.sucursalId,
-          materialId: item.materialId,
-        },
-      },
-      update: { stockActual: item.stock }, // Reseteamos stock al correr seed
-      create: {
-        sucursalId: item.sucursalId,
-        materialId: item.materialId,
-        stockActual: item.stock,
-        stockMinimo: item.minimo,
-      },
-    });
-  }
-
-  console.log("✅ Inventario cargado. ¡Listo para vender!");
+  console.log("✅ Seed finalizado correctamente.");
 }
 
 main()
   .then(async () => {
     await prisma.$disconnect();
-    console.log("✅ Seeds aplicadas correctamente");
   })
   .catch(async (error) => {
-    console.error("❌ Error en seeds:", error);
+    console.error("❌ Error en seed:", error);
     await prisma.$disconnect();
     process.exit(1);
   });

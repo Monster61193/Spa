@@ -64,7 +64,7 @@ body {
 }
 
 .app-shell {
-  max-width: 1024px;
+  max-width: 1200px; /* AUMENTADO: De 1024px a 1200px para dar más aire a la tabla extendida */
   width: 100%;
   margin: 0 auto;
   padding: 2rem 1.5rem 3rem;
@@ -255,41 +255,61 @@ button {
   border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
   font-size: 0.95rem;
+  vertical-align: middle; /* Alineación vertical centrada */
 }
 .agenda-table tr:last-child td {
   border-bottom: none;
 }
 
-/* Columnas Específicas */
+/* 
+   Columnas Específicas (Reajuste Sprint 3 para incluir Empleado)
+   Total: 100%
+   Hora: 10%
+   Servicio: 30%
+   Cliente: 20%
+   Empleado: 20% (Nuevo)
+   Estado: 10%
+   Acciones: 10%
+*/
 .col-time {
-  width: 12%;
+  width: 10%;
   font-weight: 500;
   color: var(--text-secondary);
 }
 .col-service {
-  width: 35%;
+  width: 30%;
   font-weight: 600;
 }
 .col-client {
   width: 20%;
 }
+.col-employee {
+  width: 20%; /* Nueva columna */
+}
 .col-status {
-  width: 13%;
+  width: 10%;
   text-align: center;
 }
 .col-actions {
-  width: 20%;
+  width: 10%;
   text-align: center;
 }
 
-/* Contenedor de Acciones en Tabla */
+/* Contenedor de Acciones en Tabla (Apilado Vertical) */
 .table-actions-container {
   display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 36px;
-  white-space: nowrap;
+  flex-direction: column; /* Apilar botones verticalmente */
+  gap: 0.5rem; /* Espacio vertical entre botones */
+  align-items: stretch; /* Ocupar todo el ancho disponible */
+  min-width: 90px; /* Ancho mínimo para que los botones se vean bien */
+}
+
+/* Estilo específico para botones dentro de la celda de acciones */
+.table-actions-container button {
+  width: 100%; /* Forzar ancho completo */
+  justify-content: center; /* Centrar contenido (texto/icono) */
+  font-size: 0.8rem; /* Texto un poco más pequeño para compactar */
+  padding: 0.4rem; /* Padding ajustado */
 }
 
 /* Estado Vacío */

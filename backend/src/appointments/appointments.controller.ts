@@ -26,6 +26,7 @@ const EditarItemsSchema = z.object({
   servicios_ids: z
     .array(z.string().min(1))
     .min(1, "La cita debe tener al menos un servicio asignado."),
+  empleado_id: z.string().optional(),
 });
 /**
  * Esquema para Cancelar valida el motivo de la cancelacion el motivo
@@ -34,6 +35,13 @@ const CancelarSchema = z.object({
   motivo: z
     .string()
     .min(5, "El motivo de cancelación es obligatorio (mín. 5 caracteres)."),
+});
+/**
+ * Esquema para Cerrar cita, permitiendo asignar empleado al cerrar
+ * */
+const CloseAppointmentSchema = z.object({
+  citaId: z.string().uuid(),
+  empleadoId: z.string().optional(), // <--- NUEVO: Permite asignar al cerrar
 });
 
 /**
@@ -120,6 +128,13 @@ export class AppointmentsController {
     @Req() request: Request & { branchId?: string }
   ) {
     const branch_id = request.branchId ?? "branch-principal";
-    return this.appointments_service.cerrar(payload.citaId, branch_id);
+    // Validamos con Zod
+    const datos = CloseAppointmentSchema.parse(payload);
+
+    return this.appointments_service.cerrar(
+      payload.citaId,
+      branch_id,
+      datos.empleadoId
+    );
   }
 }

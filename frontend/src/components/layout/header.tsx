@@ -1,8 +1,9 @@
 import { useAuth } from '../../contexts/auth.context';
 import { ThemeToggle } from '../ui/theme_toggle';
+import { BranchSelector } from '../branch_selector/branch_selector';
 
 /**
- * Header simplificado con información de usuario y tema.
+ * Header con navegación, selector de sucursal centralizado y controles de usuario.
  */
 export const Header = () => {
   const { user, logout } = useAuth();
@@ -19,33 +20,53 @@ export const Header = () => {
         </span>
       </div>
 
-      {/* DERECHA: Usuario y Controles (Eliminados Buscar y Pantalla Completa) */}
+      {/* CENTRO: Selector de Sucursal */}
+      {/* Usamos flex para centrar y alinear el texto con el select */}
+      <div
+        className="header-center"
+        style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.8rem' }}
+      >
+        {/* Texto Informativo */}
+        <span
+          style={{
+            fontSize: '0.85rem',
+            color: 'var(--text-secondary)',
+            fontWeight: 500,
+            whiteSpace: 'nowrap', // Evita saltos de línea en pantallas pequeñas
+          }}
+        >
+          Sucursal activa:
+        </span>
+
+        {/* Selector */}
+        <div style={{ maxWidth: '250px', width: '100%' }}>
+          <BranchSelector compact={true} />
+        </div>
+      </div>
+
+      {/* DERECHA: Usuario y Controles */}
       <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        {/* Información del Usuario (Añadido) */}
         <div style={{ textAlign: 'right', marginRight: '0.5rem' }}>
           <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{user?.nombre || 'Administrador'}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{user?.email}</div>
         </div>
 
-        {/* Separador */}
         <div
           className="header-separator"
           style={{ width: '1px', height: '20px', backgroundColor: 'var(--text-secondary)' }}
         ></div>
 
-        {/* Toggle Tema */}
         <ThemeToggle />
 
-        {/* Logout */}
         <button
           onClick={logout}
           title="Cerrar Sesión"
-          className="btn-logout" // Usar una clase para styling en CSS
+          className="btn-logout"
           style={{
             fontSize: '0.9rem',
             color: '#ef4444',
             background: 'rgba(239, 68, 68, 0.1)',
-            border: 'none',
+            border: '1px solid transparent',
             padding: '0.5rem 1rem',
             borderRadius: '6px',
             cursor: 'pointer',

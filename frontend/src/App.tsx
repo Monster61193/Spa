@@ -1,12 +1,10 @@
 import { useState } from 'react';
 import { isAxiosError } from 'axios';
 
-// --- COMPONENTES DE NEGOCIO (Dominios) ---
-import { BranchSelector } from './components/branch_selector/branch_selector';
+// --- COMPONENTES DE NEGOCIO ---
 import { InventoryTable } from './components/inventory/inventory_table';
 import { AppointmentForm } from './components/forms/appointment_form';
 import { AppointmentDetailsModal } from './components/forms/appointment_details_modal';
-// Nuevos componentes del Sprint 2.5 (Catálogos e Inventario)
 import { ServicesManagerModal } from './components/services/services_manager_modal';
 import { InventoryActionModal } from './components/inventory/inventory_action_modal';
 
@@ -15,19 +13,21 @@ import { Modal } from './components/ui/modal';
 import { Header } from './components/layout/header';
 import { LoginPage } from './pages/login_page';
 
-// --- HOOKS Y CONTEXTOS (Capa de Aplicación) ---
+// --- HOOKS Y CONTEXTOS ---
 import { useAppointments } from './hooks/use_appointments';
-import { use_inventory, InventoryItem } from './hooks/use_inventory'; // Importamos InventoryItem
+import { use_inventory, InventoryItem } from './hooks/use_inventory';
 import { useBranch } from './contexts/branch.context';
 import { useAuth } from './contexts/auth.context';
+import { useEmployees } from './hooks/use_employees';
 
 // --- INFRAESTRUCTURA ---
 import { api_client } from './api/api_client';
 
-// --- ESTILOS GLOBALES UNIFICADOS ---
+// --- ESTILOS ---
 import './App.css';
+import './components/forms/appointment_details.css'; // Asegura cargar los estilos del select y ticket
 
-// --- DEFINICIÓN DE TIPOS LOCALES ---
+// ... (Tipos FeedbackState y ConfirmationState sin cambios) ...
 type FeedbackState = {
   is_open: boolean;
   title: string;
@@ -40,12 +40,7 @@ type ConfirmationState = {
   cita_id: string | null;
 };
 
-/**
- * Componente Principal: Dashboard Operativo.
- * Gestiona el ciclo de vida completo de las operaciones de Citas e Inventario.
- */
 export const App = () => {
-  // --- HOOKS DE CONTEXTO ---
   const { is_authenticated } = useAuth();
   const { activeBranch: active_branch } = useBranch();
 
@@ -57,6 +52,7 @@ export const App = () => {
   } = useAppointments();
 
   const { data: inventory_data = [], isLoading: is_loading_inventory } = use_inventory();
+  const { data: employees = [] } = useEmployees();
 
   // --- ESTADOS DE UI ---
   const [is_form_modal_open, set_is_form_modal_open] = useState(false);
@@ -64,7 +60,9 @@ export const App = () => {
   const [processing_ids, set_processing_ids] = useState<string[]>([]);
   const [is_services_modal_open, set_is_services_modal_open] = useState(false);
 
-  // Nuevo estado para el modal de Inventario (Crear/Restock)
+  // Estado para el empleado seleccionado DURANTE el cierre
+  const [closing_employee_id, set_closing_employee_id] = useState<string>('');
+
   const [inventory_modal, set_inventory_modal] = useState<{
     is_open: boolean;
     mode: 'create' | 'restock';
@@ -75,7 +73,6 @@ export const App = () => {
     target_item: null,
   });
 
-  // Estados Modales Auxiliares
   const [feedback, set_feedback] = useState<FeedbackState>({
     is_open: false,
     title: '',
@@ -88,49 +85,63 @@ export const App = () => {
     cita_id: null,
   });
 
-  // --- HANDLERS (Lógica de Negocio) ---
+  // --- VARIABLES DERIVADAS (NUEVO) ---
+  // Recuperamos la cita que se está intentando cerrar para mostrar el resumen
+  const appointment_to_close = appointments_list.find((a) => a.id === confirmation.cita_id);
+
+  // --- HANDLERS ---
 
   const handle_close_feedback = () => set_feedback((prev) => ({ ...prev, is_open: false }));
-
   const handle_cancel_confirmation = () => set_confirmation({ is_open: false, cita_id: null });
-
   const handle_view_details = (appointment: any) => set_selected_appointment(appointment);
 
-  const handle_request_close = (cita_id: string) => set_confirmation({ is_open: true, cita_id });
+  /**
+   * Abre el modal de confirmación.
+   * Pre-carga el empleado si ya está asignado.
+   */
+  const handle_request_close = (cita_id: string) => {
+    const cita_actual = appointments_list.find((c) => c.id === cita_id);
+    set_closing_employee_id(cita_actual?.empleado_id || '');
+    set_confirmation({ is_open: true, cita_id });
+  };
 
   /**
-   * NUEVO HANDLER: Gestiona el éxito al crear una cita.
-   * 1. Cierra el modal del formulario.
-   * 2. Muestra feedback visual de éxito.
-   * 3. Refresca la tabla de citas (adiós reload).
+   * NUEVO HANDLER: Navegar de Cierre -> Edición
+   * Cierra el modal de confirmación y abre el modal de detalles en modo edición.
    */
+  const handle_switch_to_edit = () => {
+    if (!appointment_to_close) return;
+
+    // 1. Cerrar modal de confirmación
+    handle_cancel_confirmation();
+
+    // 2. Abrir modal de detalles (el usuario deberá darle a "Editar")
+    set_selected_appointment(appointment_to_close);
+  };
+
   const handle_appointment_created = () => {
-    set_is_form_modal_open(false); // Cierra el modal
+    set_is_form_modal_open(false);
     set_feedback({
       is_open: true,
       title: '¡Cita Agendada!',
-      message: 'La cita se ha registrado correctamente en el sistema.',
+      message: 'La cita se ha registrado correctamente.',
       type: 'success',
     });
-    refetch_appointments(); // Actualización "live"
+    refetch_appointments();
   };
-
-  // --- HANDLERS INVENTARIO (Sprint 2.5) ---
 
   const open_create_material = () => {
     set_inventory_modal({ is_open: true, mode: 'create', target_item: null });
   };
-
   const open_restock_material = (item: InventoryItem) => {
     set_inventory_modal({ is_open: true, mode: 'restock', target_item: item });
   };
-
   const close_inventory_modal = () => {
     set_inventory_modal((prev) => ({ ...prev, is_open: false }));
   };
 
   /**
-   * Ejecuta el cierre de venta (Transacción).
+   * Ejecuta el cierre de venta.
    */
   const handle_execute_close = async () => {
     const target_id = confirmation.cita_id;
@@ -140,18 +151,22 @@ export const App = () => {
     set_processing_ids((prev) => [...prev, target_id]);
 
     try {
-      const response = await api_client.post('/appointments/close', { citaId: target_id });
+      await api_client.post('/appointments/close', {
+        citaId: target_id,
+        empleadoId: closing_employee_id || undefined,
+      });
+
       set_feedback({
         is_open: true,
         title: '🎉 ¡Cita Cerrada!',
-        message: response.data.mensaje || 'Venta procesada y stock actualizado.',
+        message: 'Venta procesada, comisión asignada y stock actualizado.',
         type: 'success',
       });
       refetch_appointments();
     } catch (error) {
-      console.error('Error crítico en cierre de cita:', error);
+      console.error('Error crítico en cierre:', error);
       let titulo = 'Error del Sistema';
-      let mensaje = 'Ocurrió un error inesperado de red.';
+      let mensaje = 'Ocurrió un error inesperado.';
       let tipo: 'error' | 'warning' = 'error';
 
       if (isAxiosError(error) && error.response) {
@@ -163,9 +178,9 @@ export const App = () => {
           tipo = 'warning';
         } else if (status === 403) {
           titulo = '⛔ Acceso Denegado';
-          mensaje = 'No tienes permisos en esta sucursal.';
+          mensaje = 'Sin permisos.';
         } else {
-          mensaje = `Error (${status}): ${msg_backend || mensaje}`;
+          mensaje = `Error (${status}): ${msg_backend}`;
         }
       }
       set_feedback({ is_open: true, title: titulo, message: mensaje, type: tipo });
@@ -174,7 +189,6 @@ export const App = () => {
     }
   };
 
-  // Guard de autenticación
   if (!is_authenticated) return <LoginPage />;
 
   return (
@@ -182,8 +196,7 @@ export const App = () => {
       <Header />
 
       <main className="app-shell">
-        {/* 1. BIENVENIDA */}
-        <div className="welcome-header">
+        <div className="welcome-header" style={{ marginTop: '1rem' }}>
           <div className="welcome-logo">🧖‍♀️</div>
           <div>
             <h1 className="welcome-title">Bienvenido al Panel de Control</h1>
@@ -193,34 +206,15 @@ export const App = () => {
           </div>
         </div>
 
-        {/* 2. SELECTOR DE SUCURSAL */}
-        <section className="panel section-spacer">
-          <BranchSelector />
-          {active_branch && (
-            <p className="branch-info">
-              Sucursal activa: <strong>{active_branch.nombre}</strong>
-            </p>
-          )}
-        </section>
-
-        {/* 3. AGENDA */}
+        {/* 2. AGENDA DEL DÍA */}
         <section className="panel">
           <div className="panel-header">
             <h2>Agenda del Día</h2>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              {/* Botón Gestión de Catálogo (Sprint 2.5) */}
-              <button
-                className="btn-secondary-action"
-                onClick={() => set_is_services_modal_open(true)}
-                title="Gestionar catálogo de servicios"
-              >
+              <button className="btn-secondary-action" onClick={() => set_is_services_modal_open(true)}>
                 ⚙️ Servicios
               </button>
-              <button
-                className="btn-primary"
-                onClick={() => set_is_form_modal_open(true)}
-                aria-label="Crear nueva cita"
-              >
+              <button className="btn-primary" onClick={() => set_is_form_modal_open(true)}>
                 + Nueva Cita
               </button>
             </div>
@@ -236,6 +230,7 @@ export const App = () => {
                     <th className="col-time">Hora</th>
                     <th className="col-service">Servicio(s)</th>
                     <th className="col-client">Cliente</th>
+                    <th className="col-employee">Atendido por</th>
                     <th className="col-status">Estado</th>
                     <th className="col-actions">Acciones</th>
                   </tr>
@@ -249,16 +244,21 @@ export const App = () => {
                         </td>
                         <td className="col-service">{appt.servicio}</td>
                         <td>{appt.cliente}</td>
+                        <td>
+                          {appt.empleado === 'No asignado' ? (
+                            <span style={{ fontStyle: 'italic', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                              Sin asignar
+                            </span>
+                          ) : (
+                            appt.empleado
+                          )}
+                        </td>
                         <td className="col-status">
                           <span className={`badge-status status-${appt.estado}`}>{appt.estado}</span>
                         </td>
                         <td className="col-actions">
                           <div className="table-actions-container">
-                            <button
-                              onClick={() => handle_view_details(appt)}
-                              className="btn-secondary-action"
-                              title="Ver detalles completos"
-                            >
+                            <button onClick={() => handle_view_details(appt)} className="btn-secondary-action">
                               <span>📄</span> Detalle
                             </button>
                             {appt.estado === 'pendiente' && (
@@ -266,7 +266,6 @@ export const App = () => {
                                 className="btn-danger"
                                 onClick={() => handle_request_close(appt.id)}
                                 disabled={processing_ids.includes(appt.id)}
-                                title="Procesar cierre de venta"
                               >
                                 {processing_ids.includes(appt.id) ? '...' : 'Cerrar'}
                               </button>
@@ -277,7 +276,7 @@ export const App = () => {
                     ))
                   ) : (
                     <tr className="empty-state-row">
-                      <td colSpan={5}>No hay citas registradas en esta sucursal para hoy.</td>
+                      <td colSpan={6}>No hay citas registradas hoy.</td>
                     </tr>
                   )}
                 </tbody>
@@ -286,43 +285,30 @@ export const App = () => {
           )}
         </section>
 
-        {/* 4. INVENTARIO */}
+        {/* 3. INVENTARIO */}
         <section className="panel">
           <div className="panel-header">
             <h2>📦 Inventario en Tiempo Real</h2>
-            <button
-              className="btn-secondary-action" // Botón para crear nuevo material
-              onClick={open_create_material}
-              title="Registrar nuevo material"
-            >
+            <button className="btn-secondary-action" onClick={open_create_material}>
               + Nuevo Material
             </button>
           </div>
-          <InventoryTable
-            data={inventory_data}
-            loading={is_loading_inventory}
-            onRestock={open_restock_material} // Pasamos el handler de restock
-          />
+          <InventoryTable data={inventory_data} loading={is_loading_inventory} onRestock={open_restock_material} />
         </section>
 
         {/* --- MODALES --- */}
-
-        {/* Modal: Crear Cita */}
         <Modal is_open={is_form_modal_open} on_close={() => set_is_form_modal_open(false)}>
           <AppointmentForm onSuccess={handle_appointment_created} />
         </Modal>
 
-        {/* Modal: Detalles (Lectura, Edición, Cancelación) */}
         <AppointmentDetailsModal
           isOpen={!!selected_appointment}
           onClose={() => set_selected_appointment(null)}
           appointment={selected_appointment}
         />
 
-        {/* Modal: Gestor de Servicios (Sprint 2.5) */}
         <ServicesManagerModal is_open={is_services_modal_open} on_close={() => set_is_services_modal_open(false)} />
 
-        {/* Modal: Acciones de Inventario (Sprint 2.5) */}
         <InventoryActionModal
           is_open={inventory_modal.is_open}
           on_close={close_inventory_modal}
@@ -330,34 +316,100 @@ export const App = () => {
           target_item={inventory_modal.target_item}
         />
 
-        {/* Modal: Confirmación Cierre */}
-        <Modal is_open={confirmation.is_open} on_close={handle_cancel_confirmation} title="Confirmar Acción">
+        {/* 
+            === MODAL DE CONFIRMACIÓN DE CIERRE (TICKET) === 
+        */}
+        <Modal is_open={confirmation.is_open} on_close={handle_cancel_confirmation} title="Confirmar Cierre de Venta">
           <div className="confirmation-container">
-            <div className="confirmation-icon">🤔</div>
-            <p className="confirmation-text">
-              ¿Estás seguro de cerrar esta cita?
-              <span className="confirmation-subtext">
-                Se descontará inventario y se generarán puntos automáticamente.
-              </span>
+            <div className="confirmation-icon">💰</div>
+
+            {/* --- SECCIÓN DE RESUMEN DE CITA (TICKET) --- */}
+            {appointment_to_close && (
+              <div className="checkout-summary">
+                <div
+                  style={{
+                    marginBottom: '0.8rem',
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem',
+                    textAlign: 'left',
+                  }}
+                >
+                  <strong>Cliente:</strong> {appointment_to_close.cliente}
+                </div>
+
+                {/* Lista de Servicios */}
+                {appointment_to_close.servicios_items &&
+                  appointment_to_close.servicios_items.map((item, idx) => (
+                    <div key={idx} className="checkout-row">
+                      <span>{item.nombre}</span>
+                      <span>${item.precio}</span>
+                    </div>
+                  ))}
+
+                {/* Total */}
+                <div className="checkout-total">
+                  <span>Total a Pagar</span>
+                  <span>${appointment_to_close.total}</span>
+                </div>
+
+                {/* Enlace para Editar */}
+                <div style={{ textAlign: 'right', marginTop: '0.5rem' }}>
+                  <button onClick={handle_switch_to_edit} className="btn-link-action">
+                    ✏️ ¿Olvidaste algo? Editar o agregar servicios
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <p className="confirmation-subtext" style={{ marginBottom: '1.5rem' }}>
+              Al confirmar, se descontará el inventario y se generarán los puntos correspondientes.
             </p>
+
+            {/* Selector de Empleado (Ahora con clase mejorada) */}
+            <div style={{ textAlign: 'left', marginBottom: '2rem' }}>
+              <label
+                htmlFor="closing-employee"
+                style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontSize: '0.9rem',
+                  color: 'var(--text-secondary)',
+                  fontWeight: 600,
+                }}
+              >
+                Asignar Comisión a:
+              </label>
+              <select
+                id="closing-employee" 
+                className="inline-edit-select" // <--- CLASE CSS MEJORADA
+                value={closing_employee_id}
+                onChange={(e) => set_closing_employee_id(e.target.value)}
+              >
+                <option value="">-- Sin Asignar (La casa gana) --</option>
+                {employees.map((emp) => (
+                  <option key={emp.empleado_id} value={emp.empleado_id}>
+                    {emp.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="modal-actions">
               <button onClick={handle_cancel_confirmation} className="btn-cancel">
                 Cancelar
               </button>
               <button className="btn-primary" onClick={handle_execute_close} autoFocus>
-                Sí, Confirmar
+                Confirmar Venta
               </button>
             </div>
           </div>
         </Modal>
 
-        {/* Modal: Feedback */}
+        {/* Modal Feedback */}
         <Modal is_open={feedback.is_open} on_close={handle_close_feedback} title={feedback.title}>
           <div className={`feedback-content feedback-${feedback.type}`}>
             <div className="feedback-icon-lg">
-              {feedback.type === 'success' && '✅'}
-              {feedback.type === 'warning' && '⚠️'}
-              {feedback.type === 'error' && '❌'}
+              {feedback.type === 'success' ? '✅' : feedback.type === 'warning' ? '⚠️' : '❌'}
             </div>
             <p className="feedback-msg-center">{feedback.message}</p>
             <div className="feedback-actions">
