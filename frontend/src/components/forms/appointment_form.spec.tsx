@@ -158,4 +158,24 @@ describe('AppointmentForm Component (Sprint 3 Update)', () => {
       );
     });
   });
+
+  it('Bloquea el envío si el anticipo es mayor al total del servicio', async () => {
+    render(<AppointmentForm />);
+
+    // 1. Seleccionar servicio de $500 (según nuestro mock global)
+    fireEvent.change(screen.getByLabelText(/Agregar Servicios/i), { target: { value: 'srv-1' } });
+    fireEvent.click(screen.getByText('+'));
+
+    // 2. Intentar poner un anticipo de $600 (Inválido)
+    const inputAnticipo = screen.getByLabelText(/Anticipo/i);
+    fireEvent.change(inputAnticipo, { target: { value: '600' } });
+
+    // 3. Verificar feedback visual inmediato
+    // El texto de error debe aparecer
+    expect(await screen.findByText(/El anticipo excede el total/i)).toBeInTheDocument();
+
+    // 4. Verificar que el botón está deshabilitado
+    const btnConfirmar = screen.getByRole('button', { name: /Confirmar Cita/i });
+    expect(btnConfirmar).toBeDisabled();
+  });
 });

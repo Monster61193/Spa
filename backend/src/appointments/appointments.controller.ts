@@ -16,6 +16,10 @@ const AgendarSchema = z.object({
     .array(z.string().min(1))
     .min(1, "Debes seleccionar al menos un servicio"),
   fecha_hora: z.string().datetime("Formato de fecha inválido (ISO 8601)"),
+  anticipo: z.coerce
+    .number()
+    .min(0, "El anticipo no puede ser negativo")
+    .optional(),
 });
 
 /**

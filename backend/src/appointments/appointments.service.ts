@@ -16,9 +16,15 @@ export class AppointmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Lista las citas de una sucursal con metadatos para la UI.
-   * Se incluyen IDs de relaciones para permitir la edición en el frontend.
-   * Se incluye información del empleado asignado.
+   * Lista las citas de una sucursal con datos enriquecidos para la UI.
+   *
+   * Lógica Transaccional:
+   * 1. Consulta las citas de la sucursal ordenadas por fecha junto con usuario, empleado y servicios relacionados.
+   * 2. Construye cadenas de presentación para servicios y empleado, aplicando valores por defecto cuando falten relaciones.
+   * 3. Mapea cada cita a un DTO plano que incluye totales, metadatos para edición y campos de visualización.
+   *
+   * @param sucursal_id - ID de la sucursal utilizada para filtrar las citas visibles.
+   * @returns Arreglo de objetos listos para renderizar en la tabla de citas del frontend.
    */
   async listar(sucursal_id: string) {
     const citas_db = await this.prisma.cita.findMany({
@@ -61,7 +67,8 @@ export class AppointmentsService {
         empleado: nombre_empleado,
         servicio: lista_nombres || "Sin servicios asignados",
         total: Number(cita.total),
-
+        anticipo: Number(cita.anticipo),
+        restante: Number(cita.total) - Number(cita.anticipo),
         // Metadatos para Edición (Hidden fields en tabla, usados en Modal)
         cliente_id: cita.usuarioId,
         empleado_id: cita.empleadoId,
@@ -76,13 +83,23 @@ export class AppointmentsService {
 
   /**
    * Crea una nueva cita con asignación de empleado opcional.
+   *
+   * Lógica Transaccional:
+   * 1. Valida que todos los servicios solicitados existan y estén activos para evitar referencias inválidas.
+   * 2. Si se recibe un empleado, confirma su pertenencia a la sucursal activa como control de seguridad.
+   * 3. Calcula el total acumulando precios base y persiste la cita junto con los servicios seleccionados y el empleado opcional.
+   *
+   * @param data - Payload con el usuario, servicios, fecha y empleado (si aplica) para la cita.
+   * @param sucursal_id - ID de la sucursal actual que sirve como contexto de tenancy y control de acceso.
+   * @returns La cita recién creada con sus relaciones básicas.
    */
   async agendar(
     data: {
       usuario_id: string;
       servicios_ids: string[];
       fecha_hora: string;
-      empleado_id?: string; // Nuevo parámetro opcional
+      empleado_id?: string;
+      anticipo?: number;
     },
     sucursal_id: string
   ) {
@@ -122,6 +139,14 @@ export class AppointmentsService {
       0
     );
 
+    // 2. NUEVA VALIDACIÓN DE NEGOCIO: Integridad Financiera
+    const anticipo = data.anticipo ?? 0;
+    if (anticipo > total_calculado) {
+      throw new BadRequestException(
+        `El anticipo ($${anticipo}) no puede ser mayor al total de los servicios ($${total_calculado}).`
+      );
+    }
+
     // 3. Crear Cita
     return this.prisma.cita.create({
       data: {
@@ -132,6 +157,7 @@ export class AppointmentsService {
         fechaHora: new Date(data.fecha_hora),
         estado: CitaEstado.pendiente,
         total: total_calculado,
+        anticipo: anticipo,
         servicios: {
           create: servicios_encontrados.map((servicio) => ({
             servicioId: servicio.id,
@@ -143,15 +169,19 @@ export class AppointmentsService {
   }
 
   /**
-   * Actualiza los servicios de una cita existente (SPRINT 2).
-   * * Lógica Transaccional:
-   * 1. Valida que la cita exista, pertenezca a la sucursal y sea PENDIENTE.
-   * 2. Elimina todos los servicios actuales de la cita (Limpieza).
-   * 3. Inserta los nuevos servicios.
-   * 4. Recalcula y actualiza el total de la cita.
-   * * @param cita_id - ID de la cita a modificar.
-   * @param nuevos_servicios_ids - Array con los IDs de los nuevos servicios.
-   * @param sucursal_id - ID de la sucursal (Seguridad).
+   * Actualiza los servicios y empleado vinculado a una cita pendiente.
+   *
+   * Lógica Transaccional:
+   * 1. Verifica que la cita exista, pertenezca a la sucursal y se encuentre en estado pendiente para permitir la edición.
+   * 2. Valida que cada servicio solicitado esté activo en el catálogo antes de resetear las relaciones de la cita.
+   * 3. Elimina los ítems anteriores, recalcula el total según el precio base actual y crea las nuevas relaciones de servicios.
+   * 4. Actualiza la cabecera de la cita, opcionalmente reasignando empleado, y devuelve los totales resultantes.
+   *
+   * @param cita_id - UUID de la cita que se desea actualizar.
+   * @param nuevos_servicios_ids - Lista de IDs de servicios activos que reemplazan a los anteriores.
+   * @param sucursal_id - ID de la sucursal que controla el contexto del guard y garantiza tenancy seguro.
+   * @param nuevo_empleado_id - ID del empleado que se asignará si se requiere cambiar responsable al editar.
+   * @returns Objeto con mensaje de éxito, total recalculado y conteo de servicios actuales.
    */
   async actualizar_items(
     cita_id: string,
@@ -226,7 +256,17 @@ export class AppointmentsService {
   }
 
   /**
-   * Cancela una cita y registra el evento en auditoría.
+   * Cancela una cita y registra el movimiento en auditoría.
+   *
+   * Lógica Transaccional:
+   * 1. Valida existencia, sucursal y estado pendiente de la cita para impedir cancelaciones indebidas.
+   * 2. Cambia el estado de la cita y persiste el nuevo valor en la cabecera.
+   * 3. Inserta un registro de auditoría con el motivo entregado para mantener trazabilidad.
+   *
+   * @param cita_id - UUID de la cita que se desea cancelar.
+   * @param motivo - Descripción textual que se almacenará en auditoría para la acción.
+   * @param sucursal_id - ID de la sucursal activa que sirve como control de tenancy y guard.
+   * @returns Cita actualizada con estado cancelada y mensaje de confirmación.
    */
   async cancelar(cita_id: string, motivo: string, sucursal_id: string) {
     return this.prisma.$transaction(async (tx) => {
@@ -266,9 +306,21 @@ export class AppointmentsService {
   }
 
   /**
-   * Cierra una cita (Proceso de Venta).
-   * ACTUALIZACIÓN SPRINT 3: Admite `empleado_id` para asignar responsable de última hora
-   * antes de calcular comisiones.
+   * Cierra una cita transformando la reserva pendiente en venta y moviendo inventario/comisiones.
+   *
+   * Lógica Transaccional:
+   * 1. Reasigna el empleado si se proporciona un nuevo ID validando su pertenencia a la sucursal antes de continuar.
+   * 2. Recupera la cita completa con servicios, materiales, empleado y usuario para calcular impactos y validar sucursal/estado.
+   * 3. Descuenta el inventario de cada material usado por servicio, revirtiendo en caso de conflicto con stock insuficiente o configuración faltante.
+   * 4. Genera un movimiento de puntos (5% del total) cuando hay usuario y el monto supera cero.
+   * 5. Calcula y registra la comisión del empleado según su porcentaje asociado a la cita.
+   * 6. Marca la cita como cerrada y persiste el nuevo estado.
+   * 7. Inserta una entrada de auditoría indicando el cierre de venta y el monto final.
+   *
+   * @param cita_id - UUID de la cita que se va a cerrar como venta.
+   * @param sucursal_id - ID de la sucursal activa para validar Tenancy y localizar inventarios.
+   * @param empleado_id - ID opcional del empleado responsable que se asigna al momento del cierre.
+   * @returns Cita actualizada con estado cerrado y mensaje indicando éxito del proceso de venta.
    */
   async cerrar(cita_id: string, sucursal_id: string, empleado_id?: string) {
     return this.prisma.$transaction(async (tx) => {

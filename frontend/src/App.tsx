@@ -25,9 +25,8 @@ import { api_client } from './api/api_client';
 
 // --- ESTILOS ---
 import './App.css';
-import './components/forms/appointment_details.css'; // Asegura cargar los estilos del select y ticket
+import './components/forms/appointment_details.css';
 
-// ... (Tipos FeedbackState y ConfirmationState sin cambios) ...
 type FeedbackState = {
   is_open: boolean;
   title: string;
@@ -85,8 +84,7 @@ export const App = () => {
     cita_id: null,
   });
 
-  // --- VARIABLES DERIVADAS (NUEVO) ---
-  // Recuperamos la cita que se está intentando cerrar para mostrar el resumen
+  // --- VARIABLES DERIVADAS ---
   const appointment_to_close = appointments_list.find((a) => a.id === confirmation.cita_id);
 
   // --- HANDLERS ---
@@ -95,27 +93,15 @@ export const App = () => {
   const handle_cancel_confirmation = () => set_confirmation({ is_open: false, cita_id: null });
   const handle_view_details = (appointment: any) => set_selected_appointment(appointment);
 
-  /**
-   * Abre el modal de confirmación.
-   * Pre-carga el empleado si ya está asignado.
-   */
   const handle_request_close = (cita_id: string) => {
     const cita_actual = appointments_list.find((c) => c.id === cita_id);
     set_closing_employee_id(cita_actual?.empleado_id || '');
     set_confirmation({ is_open: true, cita_id });
   };
 
-  /**
-   * NUEVO HANDLER: Navegar de Cierre -> Edición
-   * Cierra el modal de confirmación y abre el modal de detalles en modo edición.
-   */
   const handle_switch_to_edit = () => {
     if (!appointment_to_close) return;
-
-    // 1. Cerrar modal de confirmación
     handle_cancel_confirmation();
-
-    // 2. Abrir modal de detalles (el usuario deberá darle a "Editar")
     set_selected_appointment(appointment_to_close);
   };
 
@@ -140,9 +126,6 @@ export const App = () => {
     set_inventory_modal((prev) => ({ ...prev, is_open: false }));
   };
 
-  /**
-   * Ejecuta el cierre de venta.
-   */
   const handle_execute_close = async () => {
     const target_id = confirmation.cita_id;
     if (!target_id) return;
@@ -206,7 +189,6 @@ export const App = () => {
           </div>
         </div>
 
-        {/* 2. AGENDA DEL DÍA */}
         <section className="panel">
           <div className="panel-header">
             <h2>Agenda del Día</h2>
@@ -285,7 +267,6 @@ export const App = () => {
           )}
         </section>
 
-        {/* 3. INVENTARIO */}
         <section className="panel">
           <div className="panel-header">
             <h2>📦 Inventario en Tiempo Real</h2>
@@ -316,14 +297,12 @@ export const App = () => {
           target_item={inventory_modal.target_item}
         />
 
-        {/* 
-            === MODAL DE CONFIRMACIÓN DE CIERRE (TICKET) === 
-        */}
+        {/* === MODAL DE CIERRE (TICKET) === */}
         <Modal is_open={confirmation.is_open} on_close={handle_cancel_confirmation} title="Confirmar Cierre de Venta">
           <div className="confirmation-container">
             <div className="confirmation-icon">💰</div>
 
-            {/* --- SECCIÓN DE RESUMEN DE CITA (TICKET) --- */}
+            {/* --- TICKET DE VENTA --- */}
             {appointment_to_close && (
               <div className="checkout-summary">
                 <div
@@ -337,7 +316,6 @@ export const App = () => {
                   <strong>Cliente:</strong> {appointment_to_close.cliente}
                 </div>
 
-                {/* Lista de Servicios */}
                 {appointment_to_close.servicios_items &&
                   appointment_to_close.servicios_items.map((item, idx) => (
                     <div key={idx} className="checkout-row">
@@ -346,13 +324,20 @@ export const App = () => {
                     </div>
                   ))}
 
-                {/* Total */}
+                {/* --- SECCIÓN ANTICIPO (NUEVO) --- */}
+                {appointment_to_close.anticipo > 0 && (
+                  <div className="checkout-row" style={{ color: 'var(--success-color)', fontWeight: 500 }}>
+                    <span>Anticipo / Seña</span>
+                    <span>-${appointment_to_close.anticipo}</span>
+                  </div>
+                )}
+
+                {/* --- TOTALES --- */}
                 <div className="checkout-total">
-                  <span>Total a Pagar</span>
-                  <span>${appointment_to_close.total}</span>
+                  <span>{appointment_to_close.anticipo > 0 ? 'Restante a Cobrar' : 'Total a Pagar'}</span>
+                  <span>${appointment_to_close.total - (appointment_to_close.anticipo || 0)}</span>
                 </div>
 
-                {/* Enlace para Editar */}
                 <div style={{ textAlign: 'right', marginTop: '0.5rem' }}>
                   <button onClick={handle_switch_to_edit} className="btn-link-action">
                     ✏️ ¿Olvidaste algo? Editar o agregar servicios
@@ -365,7 +350,7 @@ export const App = () => {
               Al confirmar, se descontará el inventario y se generarán los puntos correspondientes.
             </p>
 
-            {/* Selector de Empleado (Ahora con clase mejorada) */}
+            {/* Selector de Empleado */}
             <div style={{ textAlign: 'left', marginBottom: '2rem' }}>
               <label
                 htmlFor="closing-employee"
@@ -380,8 +365,8 @@ export const App = () => {
                 Asignar Comisión a:
               </label>
               <select
-                id="closing-employee" 
-                className="inline-edit-select" // <--- CLASE CSS MEJORADA
+                id="closing-employee"
+                className="inline-edit-select"
                 value={closing_employee_id}
                 onChange={(e) => set_closing_employee_id(e.target.value)}
               >
@@ -405,7 +390,6 @@ export const App = () => {
           </div>
         </Modal>
 
-        {/* Modal Feedback */}
         <Modal is_open={feedback.is_open} on_close={handle_close_feedback} title={feedback.title}>
           <div className={`feedback-content feedback-${feedback.type}`}>
             <div className="feedback-icon-lg">

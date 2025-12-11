@@ -37,8 +37,10 @@ const mock_cita: Appointment = {
   empleado_id: null,
   estado: 'pendiente',
   total: 500,
+  anticipo: 0,
   cliente_id: 'cli-001',
   servicios_items: [{ id: 'srv-1', nombre: 'Masaje', precio: 500 }],
+  restante: 0
 };
 
 describe('AppointmentDetailsModal (Sprint 3 UI)', () => {

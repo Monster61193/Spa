@@ -15,6 +15,10 @@ export type Appointment = {
   fechaHora: string;
   estado: string;
   total: number;
+  // NUEVOS CAMPOS FINANCIEROS
+  anticipo: number;
+  restante: number; // Calculado por backend o frontend
+
   // Datos Lógicos (para edición)
   cliente_id: string;
   empleado_id: string | null; // ID para formularios (puede ser null)

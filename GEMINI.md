@@ -200,3 +200,56 @@ This document serves as a central place for me (Gemini) to track my understandin
 
 - **Performance:** Monitor `AppointmentsService.listar` as history grows (Pagination needed in Sprint 4).
 - **Refactor:** `App.tsx` is getting large. Consider extracting `DashboardLayout` component in the future.
+
+### contexto actualizado
+
+# Gemini's Project Context for Danae Spa
+
+## 1. Project Status: SPRINT 3 (IN PROGRESS) 🚧
+
+- **Current Phase:** Sprint 3: Finance, Commissions & Promotions.
+- **Recent Achievements:**
+  - **Employee Assignment:** Full flow (Create/Edit/Close) to assign staff to appointments.
+  - **Transactional Closing:** The `close` endpoint now handles Employee Assignment + Inventory Deduction + Points + Commissions in a single atomic transaction.
+  - **UX Overhaul:** Centralized Branch Selector in Header, "Checkout Ticket" in Close Modal, and Inline Editing for appointments.
+  - **Quality:** 100% Pass rate on updated Integration Tests (Vitest + Testing Library).
+
+## 2. Architecture & Rules (Ref: AGENTS.md)
+
+- **Testing Standard:** Strict accessibility tests (`getByLabelText`) enforced. `window.matchMedia` mocked globally.
+- **Frontend Pattern:** "Smart Modals" that handle their own mutations (Edit/Cancel) but delegate major state changes (Success) to the parent via callbacks or query invalidation.
+- **Styling:** CSS variables for theming (Dark/Light) and utility classes for complex inputs (`.inline-edit-select`).
+
+## 3. Roadmap Progress
+
+### ✅ SPRINT 2.5: CATALOG MANAGEMENT (Completed)
+
+- [x] CRUD Services & Inventory.
+- [x] Atomic Stock increment.
+
+### 🚀 SPRINT 3: FINANCE & PROMOTIONS (Current Focus)
+
+**Commissions & Staff:**
+
+- [x] **Backend:** `GET /users/employees` (Filter by Branch).
+- [x] **Backend:** Update `Cita` model & logic to support `empleadoId`.
+- [x] **Frontend:** Employee Selector in AppointmentForm (Create).
+- [x] **Frontend:** Inline Employee Editor in Details Modal (Update).
+- [x] **Frontend:** "Checkout" flow with last-minute employee assignment (Close).
+
+**Financials:**
+
+- [ ] **DB:** Add `anticipo` (Decimal) to `Cita` table.
+- [ ] **Frontend:** Add "Anticipo" field in AppointmentForm.
+- [ ] **Backend:** Logic to handle partial payments.
+
+**Promotions:**
+
+- [ ] **Backend:** Implement `PromotionsService` logic (Date & Branch validation).
+- [ ] **Frontend:** Display active promotions in Dashboard.
+- [ ] **Frontend:** Apply promotion during Checkout.
+
+## 4. Technical Debt / Watchlist
+
+- **Refactor:** `App.tsx` is still large. The "Close Appointment" logic is complex enough to be extracted into a custom hook `useCheckout()` in the future.
+- **Performance:** Ensure `useEmployees` cache invalidation works correctly when switching branches (Verified via keys, but keep monitoring).

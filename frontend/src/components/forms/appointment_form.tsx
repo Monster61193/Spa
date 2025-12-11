@@ -13,14 +13,17 @@ import './appointment_form.css';
 
 /**
  * Esquema de validación para la creación de citas.
- * Actualizado para Sprint 3: Incluye `empleado_id` opcional.
+ * Actualizado para Sprint 3:
+ * - `empleado_id` opcional.
+ * - `anticipo` numérico, no negativo, con valor por defecto 0.
  */
 const AppointmentSchema = z.object({
   cliente_id: z.string().min(1, 'Debes seleccionar un cliente.'),
-  // El empleado es opcional al crear, pero vital para calcular comisiones al cerrar.
   empleado_id: z.string().optional(),
   servicios_ids: z.array(z.string()).min(1, 'Debes agregar al menos un servicio a la cita.'),
   fecha_hora: z.string().min(1, 'La fecha y hora son obligatorias.'),
+  // NUEVO: Validación de anticipo
+  anticipo: z.coerce.number().min(0, 'El anticipo no puede ser negativo').default(0),
 });
 
 type AppointmentFormValues = z.infer<typeof AppointmentSchema>;
@@ -38,9 +41,9 @@ type Props = {
  * Formulario transaccional para agendar citas.
  *
  * Funcionalidades Clave:
- * 1. Selección de Cliente.
- * 2. Asignación de Empleado (Sprint 3 - Comisiones).
- * 3. Carrito de Servicios (Cálculo de totales en tiempo real).
+ * 1. Selección de Cliente y Empleado.
+ * 2. Carrito de Servicios (Cálculo de totales).
+ * 3. Gestión de Anticipos (Validación contra total).
  *
  * @param {Props} props - Props del componente.
  */
@@ -51,7 +54,6 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
   // --- HOOKS DE DATOS ---
   const { data: services = [], isLoading: is_loading_services } = useServices();
   const { data: clients = [], isLoading: is_loading_clients } = useClients();
-  // Consumimos empleados filtrados por la sucursal activa
   const { data: employees = [], isLoading: is_loading_employees } = useEmployees();
 
   // --- ESTADO LOCAL ---
@@ -68,14 +70,16 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
     resolver: zodResolver(AppointmentSchema),
     defaultValues: {
       cliente_id: '',
-      empleado_id: '', // Valor inicial vacío
+      empleado_id: '',
       servicios_ids: [],
       fecha_hora: '',
+      anticipo: 0, // Valor inicial
     },
   });
 
   // --- CÁLCULOS EN TIEMPO REAL ---
   const added_service_ids = watch('servicios_ids');
+  const anticipo_ingresado = watch('anticipo'); // Observamos el anticipo para validar
 
   const total_estimado = added_service_ids.reduce((sum, id) => {
     const service = services.find((s) => s.id === id);
@@ -86,6 +90,9 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
     const service = services.find((s) => s.id === id);
     return sum + (service?.duracionMinutos || 0);
   }, 0);
+
+  // Validación de negocio visual: Anticipo > Total
+  const es_anticipo_invalido = anticipo_ingresado > total_estimado;
 
   // Fecha mínima (hoy) para el input datetime-local
   const now = new Date();
@@ -110,18 +117,24 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
 
   /**
    * Envío del formulario.
-   * Construye el payload incluyendo el empleado asignado.
+   * Construye el payload incluyendo el empleado y el anticipo.
    */
   const on_submit: SubmitHandler<AppointmentFormValues> = async (data) => {
     if (!user || !activeBranch) return;
     set_api_error(null);
 
+    // Validación final de seguridad antes de enviar
+    if (data.anticipo > total_estimado) {
+      set_api_error(`El anticipo no puede ser mayor al total ($${total_estimado}).`);
+      return;
+    }
+
     const payload = {
       usuario_id: data.cliente_id,
-      // Enviamos undefined si es string vacío para que el backend lo ignore limpiamente
       empleado_id: data.empleado_id || undefined,
       servicios_ids: data.servicios_ids,
       fecha_hora: new Date(data.fecha_hora).toISOString(),
+      anticipo: data.anticipo, // Enviamos el anticipo
     };
 
     try {
@@ -164,10 +177,9 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
       <form onSubmit={handleSubmit(on_submit)} className="appointment-form">
         {/*
           SECCIÓN 1: CLIENTE Y EMPLEADO
-          Usamos Grid para ponerlos lado a lado.
+          Grid de 2 columnas.
         */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          {/* Selector de Cliente */}
           <div className="form-group">
             <label htmlFor="cliente_id" className="form-label">
               Cliente
@@ -183,7 +195,6 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
             {errors.cliente_id && <span className="error-message">{errors.cliente_id.message}</span>}
           </div>
 
-          {/* Selector de Empleado (Nuevo Sprint 3) */}
           <div className="form-group">
             <label htmlFor="empleado_id" className="form-label">
               Atiende (Opcional)
@@ -229,7 +240,6 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
             </button>
           </div>
 
-          {/* Lista de items agregados */}
           {added_service_ids.length > 0 && (
             <ul className="cart-list">
               {added_service_ids.map((id) => {
@@ -260,23 +270,58 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
           {errors.servicios_ids && <span className="error-message">{errors.servicios_ids.message}</span>}
         </div>
 
-        {/* SECCIÓN 3: FECHA Y HORA */}
-        <div className="form-group">
-          <label htmlFor="fecha_hora" className="form-label">
-            Fecha y Hora
-          </label>
-          <input
-            id="fecha_hora"
-            type="datetime-local"
-            min={min_datetime}
-            className="form-input"
-            {...register('fecha_hora')}
-          />
-          {errors.fecha_hora && <span className="error-message">{errors.fecha_hora.message}</span>}
+        {/* 
+          SECCIÓN 3: FECHA Y ANTICIPO (NUEVO)
+          Grid de 2 columnas para optimizar espacio.
+        */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          {/* Fecha */}
+          <div className="form-group">
+            <label htmlFor="fecha_hora" className="form-label">
+              Fecha y Hora
+            </label>
+            <input
+              id="fecha_hora"
+              type="datetime-local"
+              min={min_datetime}
+              className="form-input"
+              {...register('fecha_hora')}
+            />
+            {errors.fecha_hora && <span className="error-message">{errors.fecha_hora.message}</span>}
+          </div>
+
+          {/* Anticipo */}
+          <div className="form-group">
+            <label htmlFor="anticipo" className="form-label">
+              Anticipo ($)
+            </label>
+            <input
+              id="anticipo"
+              type="number"
+              min="0"
+              step="0.50"
+              className={`form-input ${es_anticipo_invalido ? 'input-error' : ''}`}
+              {...register('anticipo')}
+            />
+            {errors.anticipo && <span className="error-message">{errors.anticipo.message}</span>}
+          </div>
         </div>
 
+        {/* Feedback visual si el anticipo es incorrecto */}
+        {es_anticipo_invalido && (
+          <div
+            style={{ color: '#dc2626', fontSize: '0.85rem', textAlign: 'right', marginTop: '-0.5rem', fontWeight: 500 }}
+          >
+            ⚠️ El anticipo excede el total del servicio.
+          </div>
+        )}
+
         {/* BOTÓN DE ACCIÓN */}
-        <button type="submit" disabled={isSubmitting} className="btn-submit">
+        <button
+          type="submit"
+          disabled={isSubmitting || es_anticipo_invalido} // Bloqueamos si el anticipo es inválido
+          className="btn-submit"
+        >
           {isSubmitting ? 'Guardando...' : `Confirmar Cita ($${total_estimado})`}
         </button>
       </form>

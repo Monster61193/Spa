@@ -24,6 +24,9 @@
   --primary-hover: #1d4ed8;
   --danger-color: #ef4444;
   --danger-hover: #dc2626;
+
+  /* --- NUEVO: Color de Éxito (Para anticipos y feedback) --- */
+  --success-color: #16a34a;
 }
 
 /* Paleta Oscura */
@@ -42,6 +45,9 @@
   --status-pending-text: #fef08a;
   --status-confirmed-bg: #052e16;
   --status-confirmed-text: #bbf7d0;
+
+  /* Ajuste de éxito para modo oscuro (más brillante) */
+  --success-color: #4ade80;
 }
 
 /* =========================================
@@ -64,7 +70,7 @@ body {
 }
 
 .app-shell {
-  max-width: 1200px; /* AUMENTADO: De 1024px a 1200px para dar más aire a la tabla extendida */
+  max-width: 1200px; /* Ancho aumentado para la tabla */
   width: 100%;
   margin: 0 auto;
   padding: 2rem 1.5rem 3rem;
@@ -261,16 +267,7 @@ button {
   border-bottom: none;
 }
 
-/* 
-   Columnas Específicas (Reajuste Sprint 3 para incluir Empleado)
-   Total: 100%
-   Hora: 10%
-   Servicio: 30%
-   Cliente: 20%
-   Empleado: 20% (Nuevo)
-   Estado: 10%
-   Acciones: 10%
-*/
+/* Columnas Específicas */
 .col-time {
   width: 10%;
   font-weight: 500;
@@ -284,7 +281,7 @@ button {
   width: 20%;
 }
 .col-employee {
-  width: 20%; /* Nueva columna */
+  width: 20%;
 }
 .col-status {
   width: 10%;
@@ -295,21 +292,20 @@ button {
   text-align: center;
 }
 
-/* Contenedor de Acciones en Tabla (Apilado Vertical) */
+/* Contenedor de Acciones en Tabla */
 .table-actions-container {
   display: flex;
-  flex-direction: column; /* Apilar botones verticalmente */
-  gap: 0.5rem; /* Espacio vertical entre botones */
-  align-items: stretch; /* Ocupar todo el ancho disponible */
-  min-width: 90px; /* Ancho mínimo para que los botones se vean bien */
+  flex-direction: column; /* Apilar botones */
+  gap: 0.5rem;
+  align-items: stretch;
+  min-width: 90px;
 }
 
-/* Estilo específico para botones dentro de la celda de acciones */
 .table-actions-container button {
-  width: 100%; /* Forzar ancho completo */
-  justify-content: center; /* Centrar contenido (texto/icono) */
-  font-size: 0.8rem; /* Texto un poco más pequeño para compactar */
-  padding: 0.4rem; /* Padding ajustado */
+  width: 100%;
+  justify-content: center;
+  font-size: 0.8rem;
+  padding: 0.4rem;
 }
 
 /* Estado Vacío */
@@ -468,6 +464,7 @@ button {
     opacity: 1;
   }
 }
+
 /* =========================================
    6. HEADER / BARRA DE NAVEGACIÓN 
    ========================================= */

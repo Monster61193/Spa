@@ -43,8 +43,10 @@ describe("AppointmentsService", () => {
   beforeEach(async () => {
     jest.resetAllMocks(); // Limpieza vital
     // Restaurar la implementación de $transaction después del reset
-    mock_prisma.$transaction.mockImplementation(async (cb: any) => await cb(mock_prisma));
-    
+    mock_prisma.$transaction.mockImplementation(
+      async (cb: any) => await cb(mock_prisma)
+    );
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AppointmentsService,
@@ -185,6 +187,31 @@ describe("AppointmentsService", () => {
       ).rejects.toThrow(BadRequestException);
 
       // Aseguramos que NO se creó la cita
+      expect(mock_prisma.cita.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("agendar (Validaciones Financieras)", () => {
+    it("debe rechazar la cita si el anticipo supera al total", async () => {
+      // ARRANGE
+      const payload = {
+        usuario_id: "user-1",
+        servicios_ids: ["srv-caro"],
+        fecha_hora: "2025-10-30T10:00:00Z",
+        anticipo: 2000, // Anticipo excesivo
+      };
+
+      // Simulamos que el servicio cuesta menos que el anticipo
+      mock_prisma.servicio.findMany.mockResolvedValue([
+        { id: "srv-caro", precioBase: 1000 }, // Total = 1000
+      ]);
+
+      // ACT & ASSERT
+      await expect(service.agendar(payload, "suc-1")).rejects.toThrow(
+        BadRequestException
+      ); // Debe fallar
+
+      // Aseguramos que no se llamó a crear
       expect(mock_prisma.cita.create).not.toHaveBeenCalled();
     });
   });

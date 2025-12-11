@@ -20,7 +20,7 @@ type LocalFeedback = {
 
 /**
  * Modal híbrido: Visualización y Edición de Citas.
- * Soporta edición en línea (Inline Editing) para el empleado y el estado.
+ * Soporta edición en línea, reasignación de empleados y desglose financiero (Anticipos).
  */
 export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props) => {
   // --- HOOKS ---
@@ -32,11 +32,11 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
   // --- ESTADOS ---
   const [is_editing, set_is_editing] = useState(false);
 
-  // Servicios
+  // Servicios y Totales
   const [selected_service_ids, set_selected_service_ids] = useState<string[]>([]);
   const [temp_selector, set_temp_selector] = useState<string>('');
 
-  // Empleado (Estado para el select)
+  // Empleado
   const [selected_employee_id, set_selected_employee_id] = useState<string | null>(null);
 
   // Cancelación y Feedback
@@ -64,7 +64,7 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
     }
   }, [isOpen, appointment]);
 
-  // --- MEMOS ---
+  // --- MEMOS DE FORMATO ---
   const fecha_formateada = useMemo(() => {
     if (!appointment) return '';
     return new Date(appointment.fechaHora).toLocaleDateString('es-MX', {
@@ -83,6 +83,7 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
     });
   }, [appointment]);
 
+  // --- CÁLCULOS DE EDICIÓN ---
   const edit_mode_items = useMemo(() => {
     return selected_service_ids.map((id) => catalog_services.find((s) => s.id === id)).filter(Boolean);
   }, [selected_service_ids, catalog_services]);
@@ -103,13 +104,11 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
 
   const toggle_edit_mode = () => {
     if (appointment) {
-      // Precargar servicios
       if (appointment.servicios_items && appointment.servicios_items.length > 0) {
         set_selected_service_ids(appointment.servicios_items.map((item) => item.id));
       } else {
         set_selected_service_ids([]);
       }
-      // Precargar empleado
       set_selected_employee_id(appointment.empleado_id || '');
     }
     set_is_editing(true);
@@ -181,6 +180,10 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
   if (!appointment) return null;
   const is_busy = is_saving || is_canceling;
 
+  // Calculamos el restante dinámicamente
+  const anticipo = appointment.anticipo || 0;
+  const restante = appointment.total - anticipo;
+
   return (
     <>
       <Modal is_open={isOpen} on_close={onClose} title="">
@@ -189,23 +192,21 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
           <p className="details-subtitle">Folio: {appointment.id}</p>
         </div>
 
-        {/* --- GRID DE INFORMACIÓN (Inline Editing Integrado) --- */}
+        {/* --- GRID DE INFORMACIÓN --- */}
         <div className="details-grid">
           <div className="info-group">
             <span className="info-label">Cliente</span>
             <span className="info-value">{appointment.cliente}</span>
           </div>
 
-          {/* CAMPO ATENDIDO POR: Switch texto/select */}
           <div className="info-group">
-            <label htmlFor="edit-employee" className="info-label">
+            <label htmlFor="edit-employee" className="info-label" style={{ display: 'block' }}>
               Atendido por
             </label>
             {is_editing ? (
-              // MODO EDICIÓN: Selector
               <select
                 id="edit-employee"
-                className="inline-edit-select" // <--- CLASE NUEVA AQUÍ
+                className="inline-edit-select"
                 value={selected_employee_id || ''}
                 onChange={(e) => set_selected_employee_id(e.target.value)}
                 disabled={is_busy}
@@ -218,7 +219,6 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
                 ))}
               </select>
             ) : (
-              // MODO LECTURA: Texto
               <span
                 className="info-value"
                 style={{ color: appointment.empleado === 'No asignado' ? 'var(--text-secondary)' : 'inherit' }}
@@ -246,7 +246,7 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
           </div>
         </div>
 
-        {/* --- SECCIÓN SERVICIOS --- */}
+        {/* --- MODO LECTURA: DESGLOSE FINANCIERO COMPLETO --- */}
         {!is_editing ? (
           <div className="services-section">
             <h4
@@ -271,21 +271,66 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
                 <li className="service-item">{appointment.servicio}</li>
               )}
             </ul>
-            <div style={{ textAlign: 'right', marginTop: '1.2rem', fontSize: '1.2rem' }}>
-              Total: <strong>${appointment.total}</strong>
+
+            {/* TOTALES Y ANTICIPOS */}
+            <div style={{ marginTop: '1.2rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.8rem' }}>
+              {/* Si hay anticipo, mostramos el desglose matemático */}
+              {anticipo > 0 ? (
+                <>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: '0.4rem',
+                      fontSize: '0.95rem',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    <span>Subtotal:</span>
+                    <span>${appointment.total}</span>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: '0.4rem',
+                      color: 'var(--success-color)',
+                      fontWeight: 500,
+                    }}
+                  >
+                    <span>Anticipo / Seña:</span>
+                    <span>-${anticipo}</span>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontSize: '1.3rem',
+                      fontWeight: 'bold',
+                      color: 'var(--text-primary)',
+                      marginTop: '0.5rem',
+                    }}
+                  >
+                    <span>Restante:</span>
+                    <span>${restante}</span>
+                  </div>
+                </>
+              ) : (
+                /* Si no hay anticipo, solo mostramos el total */
+                <div style={{ textAlign: 'right', fontSize: '1.3rem', fontWeight: 'bold' }}>
+                  Total: ${appointment.total}
+                </div>
+              )}
             </div>
           </div>
         ) : (
+          /* --- MODO EDICIÓN --- */
           <div className="edit-mode-container">
-            {/* El selector de empleados se movió arriba a la Grid. Aquí solo quedan los servicios. */}
-
             <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '1rem 0' }} />
-
             <h4 style={{ margin: '0 0 0.5rem 0' }}>Servicios</h4>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
               Agrega o elimina servicios. Total recalculado automáticamente.
             </p>
-
             <div className="service-selector-group">
               <select
                 className="service-select"
@@ -341,7 +386,7 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
           </div>
         )}
 
-        {/* --- FOOTER BOTONES --- */}
+        {/* Footer de Acciones */}
         <div className="details-actions" style={{ justifyContent: 'space-between' }}>
           {!is_editing && appointment.estado === 'pendiente' ? (
             <button className="btn-danger" onClick={open_cancel_modal} disabled={is_busy}>
@@ -381,10 +426,10 @@ export const AppointmentDetailsModal = ({ isOpen, onClose, appointment }: Props)
         </div>
       </Modal>
 
-      {/* Modales Anidados (Feedback y Cancelación) */}
+      {/* Modales Anidados */}
       <Modal is_open={is_cancel_modal_open} on_close={() => set_is_cancel_modal_open(false)} title="Cancelar Cita">
         <div className="cancel-form-container">
-          <p className="cancel-warning-text">Esta acción es irreversible.</p>
+          <p className="cancel-warning-text">Esta acción es irreversible. Por favor indica el motivo.</p>
           <textarea
             className="cancel-textarea"
             placeholder="Motivo de cancelación..."
