@@ -92,6 +92,13 @@ vi.mock('./hooks/use_mutate_inventory', () => ({
   useMutateInventory: () => ({ create_material: {}, restock_material: {} }),
 }));
 
+vi.mock('./hooks/use_promotions', () => ({
+  usePromotions: () => ({
+    data: [{ id: 'promo-1', nombre: 'Verano', descuento: 10, tipo_alcance: 'Global' }],
+    isLoading: false,
+  }),
+}));
+
 // Helper render
 const renderWithClient = (component: React.ReactNode) => {
   const queryClient = new QueryClient({

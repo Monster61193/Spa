@@ -19,6 +19,7 @@ import { use_inventory, InventoryItem } from './hooks/use_inventory';
 import { useBranch } from './contexts/branch.context';
 import { useAuth } from './contexts/auth.context';
 import { useEmployees } from './hooks/use_employees';
+import { usePromotions } from './hooks/use_promotions'; // <--- NUEVO IMPORT
 
 // --- INFRAESTRUCTURA ---
 import { api_client } from './api/api_client';
@@ -52,6 +53,8 @@ export const App = () => {
 
   const { data: inventory_data = [], isLoading: is_loading_inventory } = use_inventory();
   const { data: employees = [] } = useEmployees();
+  // Consumimos promociones activas
+  const { data: promotions = [] } = usePromotions();
 
   // --- ESTADOS DE UI ---
   const [is_form_modal_open, set_is_form_modal_open] = useState(false);
@@ -59,8 +62,9 @@ export const App = () => {
   const [processing_ids, set_processing_ids] = useState<string[]>([]);
   const [is_services_modal_open, set_is_services_modal_open] = useState(false);
 
-  // Estado para el empleado seleccionado DURANTE el cierre
+  // Estados para el cierre (Checkout)
   const [closing_employee_id, set_closing_employee_id] = useState<string>('');
+  const [closing_promo_id, set_closing_promo_id] = useState<string>(''); // <--- NUEVO
 
   const [inventory_modal, set_inventory_modal] = useState<{
     is_open: boolean;
@@ -84,8 +88,18 @@ export const App = () => {
     cita_id: null,
   });
 
-  // --- VARIABLES DERIVADAS ---
+  // --- VARIABLES DERIVADAS Y CÁLCULOS DE TICKET ---
   const appointment_to_close = appointments_list.find((a) => a.id === confirmation.cita_id);
+
+  // Lógica de cálculo para el ticket visual
+  const selected_promo = promotions.find((p) => p.id === closing_promo_id);
+  const ticket_subtotal = appointment_to_close?.total || 0;
+  const ticket_anticipo = appointment_to_close?.anticipo || 0;
+
+  // Calculamos descuento estimado (El backend es la autoridad final, esto es visual)
+  const ticket_descuento = selected_promo ? (ticket_subtotal * selected_promo.descuento) / 100 : 0;
+
+  const ticket_total_final = Math.max(0, ticket_subtotal - ticket_descuento - ticket_anticipo);
 
   // --- HANDLERS ---
 
@@ -96,6 +110,7 @@ export const App = () => {
   const handle_request_close = (cita_id: string) => {
     const cita_actual = appointments_list.find((c) => c.id === cita_id);
     set_closing_employee_id(cita_actual?.empleado_id || '');
+    set_closing_promo_id(''); // Resetear promo al abrir
     set_confirmation({ is_open: true, cita_id });
   };
 
@@ -126,6 +141,9 @@ export const App = () => {
     set_inventory_modal((prev) => ({ ...prev, is_open: false }));
   };
 
+  /**
+   * Ejecuta el cierre enviando empleado y promoción.
+   */
   const handle_execute_close = async () => {
     const target_id = confirmation.cita_id;
     if (!target_id) return;
@@ -137,12 +155,13 @@ export const App = () => {
       await api_client.post('/appointments/close', {
         citaId: target_id,
         empleadoId: closing_employee_id || undefined,
+        promoId: closing_promo_id || undefined, // <--- Enviar promo seleccionada
       });
 
       set_feedback({
         is_open: true,
         title: '🎉 ¡Cita Cerrada!',
-        message: 'Venta procesada, comisión asignada y stock actualizado.',
+        message: 'Venta procesada, comisión asignada, descuento aplicado y stock actualizado.',
         type: 'success',
       });
       refetch_appointments();
@@ -157,7 +176,7 @@ export const App = () => {
         const msg_backend = error.response.data.message;
         if (status === 409) {
           titulo = '⚠️ Acción Bloqueada';
-          mensaje = msg_backend;
+          mensaje = msg_backend; // Ej: Stock insuficiente o Promo inválida
           tipo = 'warning';
         } else if (status === 403) {
           titulo = '⛔ Acceso Denegado';
@@ -189,6 +208,7 @@ export const App = () => {
           </div>
         </div>
 
+        {/* 2. AGENDA DEL DÍA */}
         <section className="panel">
           <div className="panel-header">
             <h2>Agenda del Día</h2>
@@ -267,6 +287,7 @@ export const App = () => {
           )}
         </section>
 
+        {/* 3. INVENTARIO */}
         <section className="panel">
           <div className="panel-header">
             <h2>📦 Inventario en Tiempo Real</h2>
@@ -297,12 +318,12 @@ export const App = () => {
           target_item={inventory_modal.target_item}
         />
 
-        {/* === MODAL DE CIERRE (TICKET) === */}
+        {/* === MODAL DE CIERRE (TICKET DE VENTA) === */}
         <Modal is_open={confirmation.is_open} on_close={handle_cancel_confirmation} title="Confirmar Cierre de Venta">
           <div className="confirmation-container">
             <div className="confirmation-icon">💰</div>
 
-            {/* --- TICKET DE VENTA --- */}
+            {/* --- TICKET DE VENTA DINÁMICO --- */}
             {appointment_to_close && (
               <div className="checkout-summary">
                 <div
@@ -316,6 +337,7 @@ export const App = () => {
                   <strong>Cliente:</strong> {appointment_to_close.cliente}
                 </div>
 
+                {/* Lista de Servicios */}
                 {appointment_to_close.servicios_items &&
                   appointment_to_close.servicios_items.map((item, idx) => (
                     <div key={idx} className="checkout-row">
@@ -324,18 +346,29 @@ export const App = () => {
                     </div>
                   ))}
 
-                {/* --- SECCIÓN ANTICIPO (NUEVO) --- */}
-                {appointment_to_close.anticipo > 0 && (
+                {/* --- LÍNEA DE DESCUENTO (Visible solo si hay promo seleccionada) --- */}
+                {selected_promo && (
+                  <div className="checkout-row" style={{ color: 'var(--success-color)' }}>
+                    <span>
+                      Promo: {selected_promo.nombre} (-{selected_promo.descuento}%)
+                    </span>
+                    <span>-${ticket_descuento.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* --- LÍNEA DE ANTICIPO --- */}
+                {ticket_anticipo > 0 && (
                   <div className="checkout-row" style={{ color: 'var(--success-color)', fontWeight: 500 }}>
                     <span>Anticipo / Seña</span>
-                    <span>-${appointment_to_close.anticipo}</span>
+                    <span>-${ticket_anticipo}</span>
                   </div>
                 )}
 
                 {/* --- TOTALES --- */}
                 <div className="checkout-total">
-                  <span>{appointment_to_close.anticipo > 0 ? 'Restante a Cobrar' : 'Total a Pagar'}</span>
-                  <span>${appointment_to_close.total - (appointment_to_close.anticipo || 0)}</span>
+                  {/* Cambiamos el texto si hay descuentos/anticipos para ser claros */}
+                  <span>{ticket_anticipo > 0 || ticket_descuento > 0 ? 'Restante a Cobrar' : 'Total a Pagar'}</span>
+                  <span>${ticket_total_final.toFixed(2)}</span>
                 </div>
 
                 <div style={{ textAlign: 'right', marginTop: '0.5rem' }}>
@@ -350,33 +383,75 @@ export const App = () => {
               Al confirmar, se descontará el inventario y se generarán los puntos correspondientes.
             </p>
 
-            {/* Selector de Empleado */}
-            <div style={{ textAlign: 'left', marginBottom: '2rem' }}>
-              <label
-                htmlFor="closing-employee"
-                style={{
-                  display: 'block',
-                  marginBottom: '0.5rem',
-                  fontSize: '0.9rem',
-                  color: 'var(--text-secondary)',
-                  fontWeight: 600,
-                }}
-              >
-                Asignar Comisión a:
-              </label>
-              <select
-                id="closing-employee"
-                className="inline-edit-select"
-                value={closing_employee_id}
-                onChange={(e) => set_closing_employee_id(e.target.value)}
-              >
-                <option value="">-- Sin Asignar (La casa gana) --</option>
-                {employees.map((emp) => (
-                  <option key={emp.empleado_id} value={emp.empleado_id}>
-                    {emp.nombre}
-                  </option>
-                ))}
-              </select>
+            {/* --- SELECTORES EN GRID (Empleado y Promoción) --- */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '1rem',
+                textAlign: 'left',
+                marginBottom: '2rem',
+              }}
+            >
+              {/* Selector de Empleado */}
+              <div>
+                <label
+                  htmlFor="closing-employee"
+                  style={{
+                    display: 'block',
+                    marginBottom: '0.5rem',
+                    fontSize: '0.85rem',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 600,
+                  }}
+                >
+                  Asignar Comisión:
+                </label>
+                <select
+                  id="closing-employee"
+                  className="inline-edit-select"
+                  style={{ fontSize: '0.9rem', padding: '0.4rem 2rem 0.4rem 0.6rem' }}
+                  value={closing_employee_id}
+                  onChange={(e) => set_closing_employee_id(e.target.value)}
+                >
+                  <option value="">-- Casa --</option>
+                  {employees.map((emp) => (
+                    <option key={emp.empleado_id} value={emp.empleado_id}>
+                      {emp.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Selector de Promoción (NUEVO) */}
+              <div>
+                <label
+                  htmlFor="closing-promo"
+                  style={{
+                    display: 'block',
+                    marginBottom: '0.5rem',
+                    fontSize: '0.85rem',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 600,
+                  }}
+                >
+                  Aplicar Promoción:
+                </label>
+                <select
+                  id="closing-promo"
+                  className="inline-edit-select"
+                  style={{ fontSize: '0.9rem', padding: '0.4rem 2rem 0.4rem 0.6rem' }}
+                  value={closing_promo_id}
+                  onChange={(e) => set_closing_promo_id(e.target.value)}
+                >
+                  <option value="">-- Ninguna --</option>
+                  {promotions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre} (-{p.descuento}%)
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="modal-actions">

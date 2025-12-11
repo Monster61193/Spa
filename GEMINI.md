@@ -253,3 +253,24 @@ This document serves as a central place for me (Gemini) to track my understandin
 
 - **Refactor:** `App.tsx` is still large. The "Close Appointment" logic is complex enough to be extracted into a custom hook `useCheckout()` in the future.
 - **Performance:** Ensure `useEmployees` cache invalidation works correctly when switching branches (Verified via keys, but keep monitoring).
+
+## contexto actualizado :
+
+### 🚀 SPRINT 3: FINANCE & PROMOTIONS (Current Focus)
+
+**Commissions & Staff:**
+
+- [x] **Employee Assignment:** Full flow (Create/Edit/Close).
+- [x] **Transactional Closing:** Atomic updates for Status + Inventory + Points + Commissions.
+
+**Financials (Anticipos):**
+
+- [x] **DB:** Added `anticipo` to `Cita` table.
+- [x] **Backend:** Validation logic `anticipo <= total` and `restante` calculation.
+- [x] **Frontend:** Advance payment input in `AppointmentForm`.
+- [x] **Frontend:** "Checkout Ticket" in Close Modal showing math (Subtotal - Advance = Due).
+
+**Promotions (Next Up):**
+
+- [ ] **Backend:** Implement `PromotionsService` logic.
+- [ ] **Frontend:** Display active promotions in Dashboard/Checkout.

@@ -6,14 +6,21 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CitaEstado, MovimientoTipo } from "@prisma/client";
+// Importamos el servicio de promociones para usar su motor de validación
+import { PromotionsService } from "../promotions/promotions.service";
 
 /**
  * Servicio de Dominio: Gestión de Citas (Appointments).
- * Centraliza la lógica transaccional para el ciclo de vida de la cita.
+ * Centraliza la lógica transaccional para el ciclo de vida de la cita, incluyendo
+ * la orquestación de inventario, puntos, comisiones y promociones.
  */
 @Injectable()
 export class AppointmentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // Inyectamos el servicio de promociones
+    private readonly promotions_service: PromotionsService
+  ) {}
 
   /**
    * Lista las citas de una sucursal con datos enriquecidos para la UI.
@@ -32,7 +39,6 @@ export class AppointmentsService {
       orderBy: { fechaHora: "asc" },
       include: {
         usuario: { select: { id: true, nombre: true, email: true } },
-        // Incluimos al empleado y su perfil de usuario para obtener el nombre
         empleado: {
           include: {
             usuario: { select: { nombre: true } },
@@ -53,23 +59,18 @@ export class AppointmentsService {
         .map((item) => item.servicio.nombre)
         .join(", ");
 
-      // Lógica de presentación para empleado
       const nombre_empleado = cita.empleado?.usuario?.nombre ?? "No asignado";
 
-      // Mapeamos a una estructura plana pero rica en datos
       return {
         id: cita.id,
         fechaHora: cita.fechaHora,
         estado: cita.estado,
-
-        // Datos de presentación
         cliente: cita.usuario?.nombre ?? "Cliente Anónimo",
         empleado: nombre_empleado,
         servicio: lista_nombres || "Sin servicios asignados",
         total: Number(cita.total),
         anticipo: Number(cita.anticipo),
         restante: Number(cita.total) - Number(cita.anticipo),
-        // Metadatos para Edición (Hidden fields en tabla, usados en Modal)
         cliente_id: cita.usuarioId,
         empleado_id: cita.empleadoId,
         servicios_items: cita.servicios.map((s) => ({
@@ -85,13 +86,10 @@ export class AppointmentsService {
    * Crea una nueva cita con asignación de empleado opcional.
    *
    * Lógica Transaccional:
-   * 1. Valida que todos los servicios solicitados existan y estén activos para evitar referencias inválidas.
-   * 2. Si se recibe un empleado, confirma su pertenencia a la sucursal activa como control de seguridad.
-   * 3. Calcula el total acumulando precios base y persiste la cita junto con los servicios seleccionados y el empleado opcional.
-   *
-   * @param data - Payload con el usuario, servicios, fecha y empleado (si aplica) para la cita.
-   * @param sucursal_id - ID de la sucursal actual que sirve como contexto de tenancy y control de acceso.
-   * @returns La cita recién creada con sus relaciones básicas.
+   * 1. Valida que todos los servicios solicitados existan y estén activos.
+   * 2. Si se recibe un empleado, confirma su pertenencia a la sucursal activa.
+   * 3. Calcula el total acumulando precios base y persiste la cita.
+   * 4. Valida integridad financiera (Anticipo <= Total).
    */
   async agendar(
     data: {
@@ -103,7 +101,6 @@ export class AppointmentsService {
     },
     sucursal_id: string
   ) {
-    // 1. Validar servicios (Lógica existente)
     const servicios_encontrados = await this.prisma.servicio.findMany({
       where: { id: { in: data.servicios_ids }, activo: true },
     });
@@ -114,9 +111,6 @@ export class AppointmentsService {
       );
     }
 
-    // 2. Validar Empleado (Nueva lógica de seguridad)
-    // Si se envía empleado_id, verificar que pertenezca a la sucursal para evitar
-    // asignar citas a empleados de otra sede.
     if (data.empleado_id) {
       const empleado_valido = await this.prisma.empleadoSucursal.findUnique({
         where: {
@@ -139,7 +133,6 @@ export class AppointmentsService {
       0
     );
 
-    // 2. NUEVA VALIDACIÓN DE NEGOCIO: Integridad Financiera
     const anticipo = data.anticipo ?? 0;
     if (anticipo > total_calculado) {
       throw new BadRequestException(
@@ -147,12 +140,10 @@ export class AppointmentsService {
       );
     }
 
-    // 3. Crear Cita
     return this.prisma.cita.create({
       data: {
         sucursalId: sucursal_id,
         usuarioId: data.usuario_id,
-        // Vinculamos el empleado si existe
         empleadoId: data.empleado_id,
         fechaHora: new Date(data.fecha_hora),
         estado: CitaEstado.pendiente,
@@ -170,18 +161,6 @@ export class AppointmentsService {
 
   /**
    * Actualiza los servicios y empleado vinculado a una cita pendiente.
-   *
-   * Lógica Transaccional:
-   * 1. Verifica que la cita exista, pertenezca a la sucursal y se encuentre en estado pendiente para permitir la edición.
-   * 2. Valida que cada servicio solicitado esté activo en el catálogo antes de resetear las relaciones de la cita.
-   * 3. Elimina los ítems anteriores, recalcula el total según el precio base actual y crea las nuevas relaciones de servicios.
-   * 4. Actualiza la cabecera de la cita, opcionalmente reasignando empleado, y devuelve los totales resultantes.
-   *
-   * @param cita_id - UUID de la cita que se desea actualizar.
-   * @param nuevos_servicios_ids - Lista de IDs de servicios activos que reemplazan a los anteriores.
-   * @param sucursal_id - ID de la sucursal que controla el contexto del guard y garantiza tenancy seguro.
-   * @param nuevo_empleado_id - ID del empleado que se asignará si se requiere cambiar responsable al editar.
-   * @returns Objeto con mensaje de éxito, total recalculado y conteo de servicios actuales.
    */
   async actualizar_items(
     cita_id: string,
@@ -190,7 +169,6 @@ export class AppointmentsService {
     nuevo_empleado_id?: string
   ) {
     return this.prisma.$transaction(async (tx) => {
-      // 1. Validación Inicial
       const cita_actual = await tx.cita.findUnique({
         where: { id: cita_id },
       });
@@ -209,7 +187,6 @@ export class AppointmentsService {
         );
       }
 
-      // 2. Validación de Catálogo (Nuevos Servicios)
       const servicios_nuevos = await tx.servicio.findMany({
         where: { id: { in: nuevos_servicios_ids }, activo: true },
       });
@@ -220,31 +197,28 @@ export class AppointmentsService {
         );
       }
 
-      // 3. Borrado de Relaciones Anteriores (Reset)
       await tx.citaServicio.deleteMany({
         where: { citaId: cita_id },
       });
 
-      // 4. Cálculo de Nuevo Total
       const nuevo_total = servicios_nuevos.reduce(
         (acc, srv) => acc + Number(srv.precioBase),
         0
       );
 
-      // 5. Inserción de Nuevas Relaciones y Actualización de Cabecera
       const cita_actualizada = await tx.cita.update({
         where: { id: cita_id },
         data: {
           total: nuevo_total,
-          empleadoId: nuevo_empleado_id, // <--- Actualización del empleado
+          empleadoId: nuevo_empleado_id,
           servicios: {
             create: servicios_nuevos.map((srv) => ({
               servicioId: srv.id,
-              precio: srv.precioBase, // Snapshot del precio actual
+              precio: srv.precioBase,
             })),
           },
         },
-        include: { servicios: true }, // Retornamos para confirmar
+        include: { servicios: true },
       });
 
       return {
@@ -257,16 +231,6 @@ export class AppointmentsService {
 
   /**
    * Cancela una cita y registra el movimiento en auditoría.
-   *
-   * Lógica Transaccional:
-   * 1. Valida existencia, sucursal y estado pendiente de la cita para impedir cancelaciones indebidas.
-   * 2. Cambia el estado de la cita y persiste el nuevo valor en la cabecera.
-   * 3. Inserta un registro de auditoría con el motivo entregado para mantener trazabilidad.
-   *
-   * @param cita_id - UUID de la cita que se desea cancelar.
-   * @param motivo - Descripción textual que se almacenará en auditoría para la acción.
-   * @param sucursal_id - ID de la sucursal activa que sirve como control de tenancy y guard.
-   * @returns Cita actualizada con estado cancelada y mensaje de confirmación.
    */
   async cancelar(cita_id: string, motivo: string, sucursal_id: string) {
     return this.prisma.$transaction(async (tx) => {
@@ -284,19 +248,17 @@ export class AppointmentsService {
         );
       }
 
-      // Actualizamos estado
       const cita_cancelada = await tx.cita.update({
         where: { id: cita_id },
         data: { estado: CitaEstado.cancelada },
       });
 
-      // Registramos en auditoría (Vital para saber por qué se canceló)
       await tx.auditLog.create({
         data: {
           entidad: "Cita",
           accion: "Cancelación",
           sucursalId: sucursal_id,
-          usuarioId: cita.usuarioId, // Si existe
+          usuarioId: cita.usuarioId,
           descripcion: `Motivo: ${motivo}`,
         },
       });
@@ -306,29 +268,30 @@ export class AppointmentsService {
   }
 
   /**
-   * Cierra una cita transformando la reserva pendiente en venta y moviendo inventario/comisiones.
+   * Cierra una cita transformando la reserva en venta.
    *
-   * Lógica Transaccional:
-   * 1. Reasigna el empleado si se proporciona un nuevo ID validando su pertenencia a la sucursal antes de continuar.
-   * 2. Recupera la cita completa con servicios, materiales, empleado y usuario para calcular impactos y validar sucursal/estado.
-   * 3. Descuenta el inventario de cada material usado por servicio, revirtiendo en caso de conflicto con stock insuficiente o configuración faltante.
-   * 4. Genera un movimiento de puntos (5% del total) cuando hay usuario y el monto supera cero.
-   * 5. Calcula y registra la comisión del empleado según su porcentaje asociado a la cita.
-   * 6. Marca la cita como cerrada y persiste el nuevo estado.
-   * 7. Inserta una entrada de auditoría indicando el cierre de venta y el monto final.
+   * Lógica Transaccional (Actualizada S3.4):
+   * 1. Reasignación opcional de empleado (previo al cierre).
+   * 2. Aplicación de Promociones: Valida la promo enviada y descuenta el monto total.
+   * 3. Descuento de inventario.
+   * 4. Generación de puntos (sobre monto pagado real).
+   * 5. Cálculo de comisiones (sobre monto pagado real).
+   * 6. Actualización de estado y auditoría.
    *
-   * @param cita_id - UUID de la cita que se va a cerrar como venta.
-   * @param sucursal_id - ID de la sucursal activa para validar Tenancy y localizar inventarios.
-   * @param empleado_id - ID opcional del empleado responsable que se asigna al momento del cierre.
-   * @returns Cita actualizada con estado cerrado y mensaje indicando éxito del proceso de venta.
+   * @param cita_id - UUID de la cita.
+   * @param sucursal_id - Contexto de seguridad.
+   * @param empleado_id - (Opcional) Reasignación de última hora.
+   * @param promo_id - (Opcional) ID de la promoción a aplicar.
    */
-  async cerrar(cita_id: string, sucursal_id: string, empleado_id?: string) {
+  async cerrar(
+    cita_id: string,
+    sucursal_id: string,
+    empleado_id?: string,
+    promo_id?: string // <--- Nuevo parámetro SPRINT 3.4
+  ) {
     return this.prisma.$transaction(async (tx) => {
-      // 1. REASIGNACIÓN PREVIA (Si se envió un empleado al cerrar)
-      // Esto es crítico: debe ocurrir ANTES de leer la 'cita_completa' para que
-      // el cálculo de comisión use al empleado correcto.
+      // 1. REASIGNACIÓN DE EMPLEADO
       if (empleado_id) {
-        // Validamos seguridad: el empleado debe ser de la sucursal
         const es_valido = await tx.empleadoSucursal.findUnique({
           where: {
             empleadoId_sucursalId: {
@@ -344,7 +307,6 @@ export class AppointmentsService {
           );
         }
 
-        // Actualizamos la cita
         await tx.cita.update({
           where: { id: cita_id },
           data: { empleadoId: empleado_id },
@@ -352,7 +314,6 @@ export class AppointmentsService {
       }
 
       // 2. OBTENCIÓN DE DATOS COMPLETOS
-      // Ahora sí leemos la cita. Si se actualizó arriba, 'empleado' vendrá correcto.
       const cita_completa = await tx.cita.findUnique({
         where: { id: cita_id },
         include: {
@@ -361,7 +322,7 @@ export class AppointmentsService {
               servicio: { include: { serviciosMateriales: true } },
             },
           },
-          empleado: true, // Trae porcentajeComision
+          empleado: true,
           usuario: true,
         },
       });
@@ -378,7 +339,50 @@ export class AppointmentsService {
         throw new ConflictException("La cita ya fue cerrada previamente.");
       }
 
-      const monto_total = Number(cita_completa.total);
+      // --- CÁLCULO DE MONTOS (PROMOCIONES) ---
+      let monto_final = Number(cita_completa.total);
+      let descuento_aplicado = 0;
+
+      // Si se envía una promoción, intentamos aplicarla
+      if (promo_id) {
+        // Obtenemos los IDs de los servicios para validar targeting
+        const servicios_ids = cita_completa.servicios.map((s) => s.servicioId);
+
+        // Llamamos al motor de validación (Inyectado)
+        const resultado_promo =
+          await this.promotions_service.validar_y_calcular(
+            promo_id,
+            sucursal_id,
+            servicios_ids,
+            monto_final
+          );
+
+        if (!resultado_promo.valido) {
+          // Si la promo no es válida, ABORTAMOS la transacción.
+          // Política: No permitir cierres con promociones inválidas.
+          throw new ConflictException(
+            `Error de promoción: ${resultado_promo.mensaje}`
+          );
+        }
+
+        // Aplicamos el descuento
+        descuento_aplicado = resultado_promo.promo?.monto_descuento ?? 0;
+        monto_final -= descuento_aplicado;
+
+        // Evitamos montos negativos
+        if (monto_final < 0) monto_final = 0;
+
+        // Persistimos la aplicación de la promo para reportes
+        await tx.promocionAplicada.create({
+          data: {
+            citaId: cita_completa.id,
+            promocionId: promo_id,
+            montoDescontado: descuento_aplicado,
+            porcentajeAplicado: resultado_promo.promo?.porcentaje,
+          },
+        });
+      }
+      // ----------------------------------------
 
       // 3. DESCUENTO DE INVENTARIO
       for (const item_venta of cita_completa.servicios) {
@@ -417,8 +421,8 @@ export class AppointmentsService {
         }
       }
 
-      // 4. GENERACIÓN DE PUNTOS (5%)
-      const puntos_a_otorgar = Math.floor(monto_total * 0.05);
+      // 4. GENERACIÓN DE PUNTOS (5% sobre monto pagado real)
+      const puntos_a_otorgar = Math.floor(monto_final * 0.05);
       if (cita_completa.usuarioId && puntos_a_otorgar > 0) {
         await tx.puntosMovimiento.create({
           data: {
@@ -432,11 +436,10 @@ export class AppointmentsService {
         });
       }
 
-      // 5. CÁLCULO DE COMISIONES
-      // Usamos el empleado que acabamos de asegurar en el paso 1.
+      // 5. CÁLCULO DE COMISIONES (Sobre monto pagado real)
       if (cita_completa.empleado) {
         const pct = Number(cita_completa.empleado.porcentajeComision);
-        const monto_comision = monto_total * (pct / 100);
+        const monto_comision = monto_final * (pct / 100);
 
         if (monto_comision > 0) {
           await tx.comision.create({
@@ -463,11 +466,16 @@ export class AppointmentsService {
           accion: "Cierre",
           sucursalId: sucursal_id,
           usuarioId: cita_completa.usuarioId,
-          descripcion: `Cierre venta. Total: $${monto_total}. Empleado: ${cita_completa.empleado?.id ?? "Ninguno"}`,
+          descripcion: `Cierre venta. Total: $${monto_final}. Desc: $${descuento_aplicado}. Empleado: ${cita_completa.empleado?.id ?? "Ninguno"}`,
         },
       });
 
-      return { ...cita_actualizada, mensaje: "Venta procesada correctamente." };
+      return {
+        ...cita_actualizada,
+        mensaje: "Venta procesada correctamente.",
+        descuento_aplicado,
+        total_pagado: monto_final,
+      };
     });
   }
 }

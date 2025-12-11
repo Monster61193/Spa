@@ -1,63 +1,84 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, CitaEstado, MovimientoTipo } from "@prisma/client";
 import * as bcrypt from "bcrypt";
-import {
-  branches,
-  services_catalog,
-  services_overrides,
-  promotions_catalog,
-  inventory_snapshot,
-} from "../src/common/mocks/sample-data";
 
 const prisma = new PrismaClient();
 
-type InventoryRow = {
-  material: string;
-  stockActual: number;
-  stockMinimo: number;
-};
-
 async function main() {
-  console.log("🌱 Iniciando seed...");
+  console.log("🔥 INICIANDO RESET MAESTRO DE BASE DE DATOS...");
 
-  // 1. Sucursales
-  await prisma.$transaction(
-    branches.map((branch) =>
-      prisma.sucursal.upsert({
-        where: { id: branch.id },
-        update: {},
-        create: {
-          id: branch.id,
-          nombre: branch.nombre,
-          zonaHoraria: branch.zonaHoraria,
-        },
-      })
-    )
-  );
+  // 1. LIMPIEZA TOTAL (Orden específico por Foreign Keys)
+  // Borramos datos transaccionales primero
+  await prisma.auditLog.deleteMany();
+  await prisma.notificacion.deleteMany();
+  await prisma.promocionAplicada.deleteMany();
+  await prisma.comision.deleteMany();
+  await prisma.puntosMovimiento.deleteMany();
+  await prisma.citaServicio.deleteMany();
+  await prisma.cita.deleteMany();
 
-  // 2. Usuarios y Empleados (FIX PARA SPRINT 3)
+  // Borramos inventario y catálogos dependientes
+  await prisma.existencia.deleteMany();
+  await prisma.servicioMaterial.deleteMany();
+  await prisma.promocionServicio.deleteMany();
+  await prisma.servicioSucursal.deleteMany();
+  await prisma.promocion.deleteMany();
+  await prisma.material.deleteMany();
+  await prisma.servicio.deleteMany();
+
+  // Borramos usuarios y sucursales
+  await prisma.empleadoSucursal.deleteMany();
+  await prisma.empleado.deleteMany();
+  await prisma.usuario.deleteMany();
+  await prisma.sucursal.deleteMany();
+
+  console.log("✨ Base de datos limpia.");
+
+  // ====================================================================
+  // 2. SEMILLA: INFRAESTRUCTURA (Sucursales)
+  // ====================================================================
+  const suc_principal = await prisma.sucursal.create({
+    data: {
+      id: "branch-principal",
+      nombre: "Sede Polanco (Principal)",
+      zonaHoraria: "America/Mexico_City",
+    },
+  });
+
+  const suc_norte = await prisma.sucursal.create({
+    data: {
+      id: "branch-norte",
+      nombre: "Sede Satélite (Norte)",
+      zonaHoraria: "America/Mexico_City",
+    },
+  });
+
+  console.log("🏢 Sucursales creadas.");
+
+  // ====================================================================
+  // 3. SEMILLA: USUARIOS & EMPLEADOS
+  // ====================================================================
   const password = await bcrypt.hash("123456", 10);
 
-  // A. Admin General (Usuario existente)
-  await prisma.usuario.upsert({
-    where: { email: "admin@test.com" },
-    update: {},
-    create: {
-      email: "admin@test.com",
+  // A. Admin General
+  await prisma.usuario.create({
+    data: {
+      id: "user-admin",
       nombre: "Admin General",
+      email: "admin@test.com",
       password,
-      // Admin también es empleado para pruebas
       empleado: {
         create: {
+          id: "emp-admin",
           porcentajeComision: 0,
           sucursales: {
             create: [
               {
-                sucursalId: "branch-principal",
+                sucursalId: suc_principal.id,
                 rolLocal: "admin",
                 predeterminada: true,
               },
               {
-                sucursalId: "branch-norte",
+                sucursalId: suc_norte.id,
                 rolLocal: "admin",
                 predeterminada: false,
               },
@@ -68,21 +89,21 @@ async function main() {
     },
   });
 
-  // B. Ana Estilista (Empleado Principal)
-  const ana = await prisma.usuario.upsert({
-    where: { email: "ana@spa.com" },
-    update: {},
-    create: {
-      email: "ana@spa.com",
+  // B. Ana Estilista (Solo Principal - Comisión 10%)
+  await prisma.usuario.create({
+    data: {
+      id: "user-ana",
       nombre: "Ana Estilista",
+      email: "ana@spa.com",
       password,
       empleado: {
         create: {
-          porcentajeComision: 10, // 10% de comisión
+          id: "emp-ana",
+          porcentajeComision: 10,
           sucursales: {
             create: [
               {
-                sucursalId: "branch-principal",
+                sucursalId: suc_principal.id,
                 rolLocal: "estilista",
                 predeterminada: true,
               },
@@ -93,26 +114,26 @@ async function main() {
     },
   });
 
-  // C. Pedro Masajista (Empleado Principal + Norte)
-  const pedro = await prisma.usuario.upsert({
-    where: { email: "pedro@spa.com" },
-    update: {},
-    create: {
-      email: "pedro@spa.com",
+  // C. Pedro Masajista (Ambas sedes - Comisión 15%)
+  await prisma.usuario.create({
+    data: {
+      id: "user-pedro",
       nombre: "Pedro Masajista",
+      email: "pedro@spa.com",
       password,
       empleado: {
         create: {
-          porcentajeComision: 15, // 15% de comisión
+          id: "emp-pedro",
+          porcentajeComision: 15,
           sucursales: {
             create: [
               {
-                sucursalId: "branch-principal",
-                rolLocal: "masajista",
+                sucursalId: suc_principal.id,
+                rolLocal: "terapeuta",
                 predeterminada: true,
               },
               {
-                sucursalId: "branch-norte",
+                sucursalId: suc_norte.id,
                 rolLocal: "gerente",
                 predeterminada: false,
               },
@@ -123,127 +144,210 @@ async function main() {
     },
   });
 
-  // D. Cliente Test
-  await prisma.usuario.upsert({
-    where: { email: "cliente@gmail.com" },
-    update: {},
-    create: {
-      email: "cliente@gmail.com",
-      nombre: "María Cliente",
+  // D. Cliente Recurrente
+  await prisma.usuario.create({
+    data: {
+      id: "cli-sofia",
+      nombre: "Sofía Cliente",
+      email: "sofia@gmail.com",
       password,
     },
   });
 
-  console.log("✅ Usuarios y Empleados creados.");
+  console.log("👥 Usuarios y Empleados creados.");
 
-  // 3. Servicios
-  await prisma.$transaction(
-    services_catalog.map((service) =>
-      prisma.servicio.upsert({
-        where: { id: service.id },
-        update: {},
-        create: {
-          id: service.id,
-          nombre: service.nombre,
-          precioBase: service.precioBase,
-          duracionMinutos: service.duracionMinutos,
-        },
-      })
-    )
-  );
+  // ====================================================================
+  // 4. SEMILLA: CATÁLOGOS (Materiales y Servicios)
+  // ====================================================================
 
-  // 4. Overrides
-  await prisma.$transaction(
-    services_overrides.map((override) =>
-      prisma.servicioSucursal.upsert({
-        where: {
-          servicioId_sucursalId: {
-            servicioId: override.servicioId,
-            sucursalId: override.sucursalId,
-          },
-        },
-        update: {},
-        create: {
-          servicioId: override.servicioId,
-          sucursalId: override.sucursalId,
-          precio: override.precio,
-          duracionMinutos: override.duracionMinutos,
-        },
-      })
-    )
-  );
-
-  // 5. Promociones
-  await prisma.$transaction(
-    promotions_catalog.map((promo) =>
-      prisma.promocion.upsert({
-        where: { id: promo.id },
-        update: {},
-        create: {
-          id: promo.id,
-          nombre: promo.nombre,
-          descuento: promo.descuento,
-          fechaInicio: new Date(),
-          fechaFin: new Date("2026-12-31"),
-          tipo: "general",
-          estado: promo.vigente,
-        },
-      })
-    )
-  );
-
-  // 6. Materiales e Inventario
-  const material_names = new Map<string, { nombre: string; unidad: string }>();
-
-  Object.entries(inventory_snapshot).forEach(([sucursal_id, rows]) => {
-    (rows as InventoryRow[]).forEach((row) => {
-      const material_id = `${sucursal_id}-${row.material.replace(/\s+/g, "-").toLowerCase()}`;
-      material_names.set(material_id, {
-        nombre: row.material,
-        unidad: "unidad",
-      });
-    });
+  // Materiales
+  const mat_aceite = await prisma.material.create({
+    data: {
+      id: "mat-aceite",
+      nombre: "Aceite de Lavanda",
+      unidad: "ml",
+      costoUnitario: 5,
+    },
+  });
+  const mat_toalla = await prisma.material.create({
+    data: {
+      id: "mat-toalla",
+      nombre: "Toalla Desechable",
+      unidad: "pz",
+      costoUnitario: 15,
+    },
+  });
+  const mat_gel = await prisma.material.create({
+    data: {
+      id: "mat-gel",
+      nombre: "Gel Premium",
+      unidad: "gr",
+      costoUnitario: 50,
+    },
   });
 
-  await prisma.$transaction(
-    Array.from(material_names.entries()).map(([id, info]) =>
-      prisma.material.upsert({
-        where: { id },
-        update: {},
-        create: {
-          id,
-          nombre: info.nombre,
-          unidad: info.unidad,
-          costoUnitario: 0,
-        },
-      })
-    )
-  );
+  // Inventario (Existencias)
+  // Principal: Tiene de todo. Norte: Tiene poco Gel (para probar error de stock).
+  await prisma.existencia.createMany({
+    data: [
+      {
+        sucursalId: suc_principal.id,
+        materialId: mat_aceite.id,
+        stockActual: 1000,
+        stockMinimo: 50,
+      },
+      {
+        sucursalId: suc_principal.id,
+        materialId: mat_toalla.id,
+        stockActual: 500,
+        stockMinimo: 20,
+      },
+      {
+        sucursalId: suc_principal.id,
+        materialId: mat_gel.id,
+        stockActual: 200,
+        stockMinimo: 10,
+      },
+      // Norte (Escasez simulada de Gel)
+      {
+        sucursalId: suc_norte.id,
+        materialId: mat_aceite.id,
+        stockActual: 100,
+        stockMinimo: 20,
+      },
+      {
+        sucursalId: suc_norte.id,
+        materialId: mat_gel.id,
+        stockActual: 2,
+        stockMinimo: 5,
+      }, // ¡Solo 2 gramos!
+    ],
+  });
 
-  await prisma.$transaction(
-    Object.entries(inventory_snapshot).flatMap(([sucursalId, rows]) =>
-      (rows as InventoryRow[]).map((row) => {
-        const materialId = `${sucursalId}-${row.material.replace(/\s+/g, "-").toLowerCase()}`;
-        return prisma.existencia.upsert({
-          where: {
-            sucursalId_materialId: {
-              sucursalId,
-              materialId,
-            },
-          },
-          update: {},
-          create: {
-            sucursalId,
-            materialId,
-            stockActual: row.stockActual,
-            stockMinimo: row.stockMinimo,
-          },
-        });
-      })
-    )
-  );
+  // Servicios y Recetas
+  await prisma.servicio.create({
+    data: {
+      id: "srv-masaje",
+      nombre: "Masaje Relajante (60min)",
+      precioBase: 800,
+      duracionMinutos: 60,
+      serviciosMateriales: {
+        create: [
+          { materialId: mat_aceite.id, cantidad: 50 }, // Usa 50ml
+          { materialId: mat_toalla.id, cantidad: 2 }, // Usa 2 toallas
+        ],
+      },
+    },
+  });
 
-  console.log("✅ Seed finalizado correctamente.");
+  await prisma.servicio.create({
+    data: {
+      id: "srv-manicure",
+      nombre: "Manicure Gel",
+      precioBase: 450,
+      duracionMinutos: 45,
+      serviciosMateriales: {
+        create: [
+          { materialId: mat_gel.id, cantidad: 5 }, // Usa 5gr
+          { materialId: mat_toalla.id, cantidad: 1 },
+        ],
+      },
+    },
+  });
+
+  console.log("📦 Catálogos e Inventario cargados.");
+
+  // ====================================================================
+  // 5. SEMILLA: PROMOCIONES
+  // ====================================================================
+  await prisma.promocion.create({
+    data: {
+      id: "promo-verano",
+      nombre: "Verano 10% OFF",
+      descuento: 10,
+      tipo: "Global",
+      fechaInicio: new Date("2024-01-01"),
+      fechaFin: new Date("2030-12-31"),
+      estado: true,
+    },
+  });
+
+  console.log("🏷️ Promociones cargadas.");
+
+  // ====================================================================
+  // 6. SEMILLA: CITAS (Escenarios de Prueba)
+  // ====================================================================
+  const hoy = new Date();
+
+  // Cita 1: Lista para cerrar (En Principal, Ana, Masaje)
+  await prisma.cita.create({
+    data: {
+      id: "cita-ready",
+      sucursalId: suc_principal.id,
+      usuarioId: "cli-sofia",
+      empleadoId: "emp-ana", // Asignada
+      fechaHora: hoy,
+      estado: CitaEstado.pendiente,
+      total: 800,
+      anticipo: 0,
+      servicios: {
+        create: [{ servicioId: "srv-masaje", precio: 800 }],
+      },
+    },
+  });
+
+  // Cita 2: Con Anticipo (En Principal, Pedro, Manicure)
+  await prisma.cita.create({
+    data: {
+      id: "cita-anticipo",
+      sucursalId: suc_principal.id,
+      usuarioId: "cli-sofia",
+      // Sin empleado asignado (Para probar asignación al cierre)
+      fechaHora: new Date(hoy.getTime() + 3600000), // +1 hora
+      estado: CitaEstado.pendiente,
+      total: 450,
+      anticipo: 200, // Pagó 200 por adelantado
+      servicios: {
+        create: [{ servicioId: "srv-manicure", precio: 450 }],
+      },
+    },
+  });
+
+  // Cita 3: Histórica (Cerrada)
+  await prisma.cita.create({
+    data: {
+      id: "cita-cerrada",
+      sucursalId: suc_principal.id,
+      usuarioId: "cli-sofia",
+      empleadoId: "emp-ana",
+      fechaHora: new Date("2023-01-01"),
+      estado: CitaEstado.cerrada,
+      total: 800,
+      anticipo: 0,
+      servicios: {
+        create: [{ servicioId: "srv-masaje", precio: 800 }],
+      },
+    },
+  });
+
+  // Cita 4: Peligrosa (En Norte, requiere Gel, Stock bajo)
+  // Al intentar cerrar esta, debería fallar por stock insuficiente
+  await prisma.cita.create({
+    data: {
+      id: "cita-error-stock",
+      sucursalId: suc_norte.id,
+      usuarioId: "cli-sofia",
+      fechaHora: hoy,
+      estado: CitaEstado.pendiente,
+      total: 450,
+      servicios: {
+        create: [{ servicioId: "srv-manicure", precio: 450 }],
+      },
+    },
+  });
+
+  console.log("📅 Citas de prueba generadas.");
+  console.log("🚀 SEED COMPLETADO EXITOSAMENTE.");
 }
 
 main()
@@ -251,7 +355,7 @@ main()
     await prisma.$disconnect();
   })
   .catch(async (error) => {
-    console.error("❌ Error en seed:", error);
+    console.error(error);
     await prisma.$disconnect();
     process.exit(1);
   });

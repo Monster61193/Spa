@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma } from "@prisma/client";
@@ -42,6 +43,20 @@ export class ServicesService {
     // Tipado nuevo
     materiales?: { material_id: string; cantidad: number }[];
   }) {
+    // 1. VALIDACIÓN PREVIA DE MATERIALES (Defensa contra Foreign Key Error)
+    if (data.materiales && data.materiales.length > 0) {
+      const ids_solicitados = data.materiales.map((m) => m.material_id);
+
+      const count = await this.prisma.material.count({
+        where: { id: { in: ids_solicitados } },
+      });
+
+      if (count !== ids_solicitados.length) {
+        throw new BadRequestException(
+          "Uno o más materiales seleccionados en la receta no existen en el sistema. Por favor actualiza tu inventario."
+        );
+      }
+    }
     try {
       return await this.prisma.servicio.create({
         data: {
@@ -92,7 +107,6 @@ export class ServicesService {
       data: {
         nombre: data.nombre,
         descripcion: data.descripcion,
-        // Mapeo condicional: solo si viene el dato
         precioBase: data.precio_base,
         duracionMinutos: data.duracion_minutos,
         activo: data.activo,
